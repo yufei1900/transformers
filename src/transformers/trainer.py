@@ -2559,11 +2559,6 @@ class Trainer:
                             f"Error occurred when attempting to delete checkpoint folder: {e}\n"
                         )
 
-                if os.name != "nt":
-                    fd = os.open(staging_output_dir, os.O_RDONLY)
-                    os.fsync(fd)
-                    os.close(fd)
-
         self.args.distributed_state.wait_for_everyone()
 
     def _save_rng_state(self, output_dir):
