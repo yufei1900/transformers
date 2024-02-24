@@ -2488,58 +2488,21 @@ class Trainer:
 
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
-        self.save_model(output_dir, _internal_call=True)
-        if self.is_deepspeed_enabled:
-            # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
-            # config `stage3_gather_16bit_weights_on_model_save` is True
-            self.model_wrapped.save_checkpoint(output_dir)
-            
-        # Save optimizer and scheduler
-        if self.fsdp or self.is_fsdp_enabled:
-            if self.is_fsdp_enabled:
-                save_fsdp_optimizer(
-                    self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
-                )
-            else:
-                # FSDP has a different interface for saving optimizer states.
-                # Needs to be called on all ranks to gather all states.
-                # full_optim_state_dict will be deprecated after Pytorch 2.2!
-                full_osd = self.model.__class__.full_optim_state_dict(self.model, self.optimizer)
-                torch.save(full_osd, os.path.join(output_dir, OPTIMIZER_NAME))
-        
+        if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
+            logger.warning(
+                f"Checkpoint destination directory {output_dir} already exists and is non-empty. "
+                "Saving will proceed but saved results may be invalid."
+            )
+            staging_output_dir = output_dir
+        else:
+            staging_output_dir = os.path.join(run_dir, f"{checkpoint_folder}")
+        self.save_model(staging_output_dir, _internal_call=True)
 
-        if is_torch_tpu_available():
-            xm.rendezvous("saving_optimizer_states")
-            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-                reissue_pt_warnings(caught_warnings)
-        elif is_sagemaker_mp_enabled():
-            opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
-            smp.barrier()
-            if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
-                smp.save(
-                    opt_state_dict,
-                    os.path.join(output_dir, OPTIMIZER_NAME),
-                    partial=True,
-                    v3=smp.state.cfg.shard_optimizer_state,
-                )
-        elif self.args.should_save and not self.is_deepspeed_enabled and not (self.fsdp or self.is_fsdp_enabled):
-            # deepspeed.save_checkpoint above saves model/optim/sched
-            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-
-        # Save SCHEDULER & SCALER
-        is_deepspeed_custom_scheduler = self.is_deepspeed_enabled and not isinstance(
-            self.lr_scheduler, DeepSpeedSchedulerWrapper
-        )
-        if (
-            self.args.should_save
-            and (not self.is_deepspeed_enabled or is_deepspeed_custom_scheduler)
-            and not is_torch_tpu_available()
-        ):
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-            reissue_pt_warnings(caught_warnings)
+        if not self.args.save_only_model:
+            # Save optimizer and scheduler
+            self._save_optimizer_and_scheduler(staging_output_dir)
+            # Save RNG state
+            self._save_rng_state(staging_output_dir)
 
         # Determine the new best metric / best model checkpoint
         if metrics is not None and self.args.metric_for_best_model is not None:
@@ -2559,45 +2522,35 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
-            self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
-
-        # Save RNG state in non-distributed training
-        rng_states = {
-            "python": random.getstate(),
-            "numpy": np.random.get_state(),
-            "cpu": torch.random.get_rng_state(),
-        }
-        if torch.cuda.is_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
-                rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
-            else:
-                rng_states["cuda"] = torch.cuda.random.get_rng_state()
-
-        if is_torch_tpu_available():
-            rng_states["xla"] = xm.get_rng_state()
-
-        if is_torch_npu_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                rng_states["npu"] = torch.npu.random.get_rng_state_all()
-            else:
-                rng_states["npu"] = torch.npu.random.get_rng_state()
-
-        # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
-        # not yet exist.
-        os.makedirs(output_dir, exist_ok=True)
-
-        if self.args.world_size <= 1:
-            torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
-        else:
-            torch.save(rng_states, os.path.join(output_dir, f"rng_state_{self.args.process_index}.pth"))
+            self.state.save_to_json(os.path.join(staging_output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
-            self._push_from_checkpoint(output_dir)
+            self._push_from_checkpoint(staging_output_dir)
 
-        # Maybe delete some older checkpoints.
-        if self.args.should_save:
-            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+        # Place checkpoint in final location after all saving is finished.
+        # First wait for everyone to finish writing
+        self.args.distributed_state.wait_for_everyone()
+
+        # Then go through the rewriting process, only renaming and rotating from main process(es)
+        if self.is_local_process_zero() if self.args.save_on_each_node else self.is_world_process_zero():
+            if staging_output_dir != output_dir:
+                if os.path.exists(staging_output_dir):
+                    os.rename(staging_output_dir, output_dir)
+
+                    # Ensure rename completed in cases where os.rename is not atomic
+                    # And can only happen on non-windows based systems
+                    if os.name != "nt":
+                        fd = os.open(output_dir, os.O_RDONLY)
+                        os.fsync(fd)
+                        os.close(fd)
+
+            # Maybe delete some older checkpoints.
+            if self.args.should_save:
+                # Solely rely on numerical checkpoint id for rotation.
+                # mtime is not reliable especially on some fuse fs in cloud environments.
+                self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
+
+        self.args.distributed_state.wait_for_everyone()
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
