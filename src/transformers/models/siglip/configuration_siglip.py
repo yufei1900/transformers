@@ -164,6 +164,16 @@ class SiglipVisionConfig(PretrainedConfig):
     model_type = "siglip_vision_model"
     base_config_key = "vision_config"
 
+    # Default tensor parallel plan for base model `siglip`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.out_proj": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "colwise",
+    }
+
     def __init__(
         self,
         hidden_size=768,
