@@ -55,6 +55,7 @@ from .tokenization_utils_base import (
 from .utils import (
     CHAT_TEMPLATE_DIR,
     CHAT_TEMPLATE_FILE,
+    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
@@ -86,8 +87,6 @@ if sys.version_info >= (3, 11):
     Unpack = typing.Unpack
 else:
     Unpack = typing_extensions.Unpack
-
-LEGACY_CHAT_TEMPLATE_FILE = "chat_template.json"
 
 
 class TextKwargs(TypedDict, total=False):
@@ -789,12 +788,11 @@ class ProcessorMixin(PushToHubMixin):
                     _raise_exceptions_for_missing_entries=False,
                 )
 
-                # Load chat template from a separate json if exists
-                # because making it part of processor-config break BC.
-                # Processors in older version do not accept any kwargs
+                # chat_template.json is a legacy file used by the processor class
+                # a raw chat_template.jinja is preferred in future
                 resolved_chat_template_file = cached_file(
                     pretrained_model_name_or_path,
-                    LEGACY_CHAT_TEMPLATE_FILE,
+                    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
