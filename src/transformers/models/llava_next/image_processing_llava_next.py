@@ -48,7 +48,6 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -57,17 +56,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
-
-
-class LlavaNextImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    image_grid_pinpoints (`list[list[int]]`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-        method.
-    """
-
-    image_grid_pinpoints: list[list[int]]
 
 
 def divide_to_patches(image: np.ndarray, patch_size: int, input_data_format) -> list[np.ndarray]:
@@ -164,7 +152,6 @@ class LlavaNextImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "image_sizes"]
-    valid_kwargs = LlavaNextImageProcessorKwargs
 
     def __init__(
         self,
@@ -619,8 +606,10 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -654,7 +643,10 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

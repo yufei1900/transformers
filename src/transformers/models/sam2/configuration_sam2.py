@@ -14,7 +14,7 @@
 # limitations under the License.
 """SAM2 model configuration"""
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -22,15 +22,15 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class Sam2HieraDetConfig(PreTrainedConfig):
+class Sam2HieraDetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2HieraDetModel`]. It is used to instantiate
     a HieraDet model as defined in the original sam2 repo according to the specified arguments, defining the model architecture.
     Instantiating a configuration defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
     [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 96):
@@ -141,18 +141,18 @@ class Sam2HieraDetConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Sam2VisionConfig(PreTrainedConfig):
+class Sam2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2VisionModel`]. It is used to instantiate a SAM
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
     [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PretrainedConfig"]`, *optional*):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
@@ -202,6 +202,8 @@ class Sam2VisionConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
+        super().__init__(**kwargs)
+
         backbone_channel_list = [768, 384, 192, 96] if backbone_channel_list is None else backbone_channel_list
         backbone_feature_sizes = (
             [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
@@ -231,16 +233,15 @@ class Sam2VisionConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
-        super().__init__(**kwargs)
 
 
-class Sam2PromptEncoderConfig(PreTrainedConfig):
+class Sam2PromptEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2PromptEncoder`]. The [`Sam2PromptEncoder`]
     module is used to encode the input 2D points and bounding boxes.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -286,13 +287,13 @@ class Sam2PromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
-class Sam2MaskDecoderConfig(PreTrainedConfig):
+class Sam2MaskDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam2MaskDecoder`]. It is used to instantiate a SAM2
     memory encoder according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -359,15 +360,15 @@ class Sam2MaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-class Sam2Config(PreTrainedConfig):
+class Sam2Config(PretrainedConfig):
     r"""
     [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
     SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
     [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
@@ -423,6 +424,7 @@ class Sam2Config(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
@@ -440,7 +442,6 @@ class Sam2Config(PreTrainedConfig):
         self.mask_decoder_config = Sam2MaskDecoderConfig(**mask_decoder_config)
 
         self.initializer_range = initializer_range
-        super().__init__(**kwargs)
 
 
 __all__ = [

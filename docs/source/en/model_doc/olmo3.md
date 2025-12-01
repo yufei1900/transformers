@@ -26,7 +26,6 @@ limitations under the License.
 </div>
 
 # OLMo3
-
 Olmo3 is an improvement on [OLMo2](./olmo2). More details will be released on *soon*.
 
 > [!TIP]
@@ -79,7 +78,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model allenai/TBA --device 0
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model allenai/TBA --device 0
 ```
 
 </hfoption>

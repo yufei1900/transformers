@@ -67,7 +67,10 @@ def main():
     sys.argv += ["--output_dir", "./examples"]
     training_args = parser.parse_args_into_dataclasses()[0]
 
-    logger.warning(f"Process rank: {training_args.local_process_index}, device: {training_args.device}, ")
+    logger.warning(
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, "
+        f"tpu_num_cores: {training_args.tpu_num_cores}",
+    )
 
     # Essentially, what we want to verify in the distributed case is
     # that we get all samples back, in the right order.
@@ -115,7 +118,7 @@ def main():
 
         trainer.args.eval_accumulation_steps = None
 
-    logger.info("All distributed tests successful")
+    logger.info("🔥 All distributed tests successful")
 
 
 def _mp_fn(index):

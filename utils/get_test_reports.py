@@ -33,6 +33,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 import torch
 
@@ -84,8 +85,8 @@ def handle_suite(
     machine_type: str,
     dry_run: bool,
     tmp_cache: str = "",
-    resume_at: str | None = None,
-    only_in: list[str] | None = None,
+    resume_at: Optional[str] = None,
+    only_in: Optional[list[str]] = None,
     cpu_tests: bool = False,
     process_id: int = 1,
     total_processes: int = 1,

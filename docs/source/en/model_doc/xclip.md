@@ -57,6 +57,7 @@ If you're interested in submitting a resource to be included here, please feel f
 ## XCLIPConfig
 
 [[autodoc]] XCLIPConfig
+    - from_text_vision_configs
 
 ## XCLIPTextConfig
 

@@ -87,6 +87,8 @@ Data2Vec の使用を開始するのに役立つ公式 Hugging Face およびコ
 
 [[autodoc]] Data2VecVisionConfig
 
+<frameworkcontent>
+<pt>
 
 ## Data2VecAudioModel
 
@@ -163,3 +165,23 @@ Data2Vec の使用を開始するのに役立つ公式 Hugging Face およびコ
 [[autodoc]] Data2VecVisionForSemanticSegmentation
     - forward
 
+</pt>
+<tf>
+
+## TFData2VecVisionModel
+
+[[autodoc]] TFData2VecVisionModel
+    - call
+
+## TFData2VecVisionForImageClassification
+
+[[autodoc]] TFData2VecVisionForImageClassification
+    - call
+
+## TFData2VecVisionForSemanticSegmentation
+
+[[autodoc]] TFData2VecVisionForSemanticSegmentation
+    - call
+
+</tf>
+</frameworkcontent>

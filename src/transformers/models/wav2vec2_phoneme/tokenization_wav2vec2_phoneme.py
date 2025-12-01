@@ -22,10 +22,13 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 
-from ...tokenization_python import PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken
 from ...utils import (
     ModelOutput,
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
     logging,
     requires_backends,
     to_py_obj,
@@ -36,7 +39,12 @@ logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
-    import torch
+    if is_torch_available():
+        import torch
+    if is_tf_available():
+        import tensorflow as tf
+    if is_flax_available():
+        import jax.numpy as jnp  # noqa: F401
 
 
 VOCAB_FILES_NAMES = {
@@ -445,7 +453,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     # overwritten from `tokenization_utils_base.py` because we need docs for `output_char_offsets` here
     def decode(
         self,
-        token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
+        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
@@ -458,7 +466,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
@@ -501,7 +509,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     # we need docs for `output_char_offsets` here
     def batch_decode(
         self,
-        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        sequences: Union[list[int], list[list[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
@@ -511,7 +519,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor]`):
+            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.

@@ -38,7 +38,7 @@ from tests.test_pipeline_mixin import pipeline_test_mapping
 
 PIPELINE_TEST_MAPPING = {}
 for task in pipeline_test_mapping:
-    PIPELINE_TEST_MAPPING[task] = None
+    PIPELINE_TEST_MAPPING[task] = {"pt": None, "tf": None}
 
 
 # DO **NOT** add item to this set (unless the reason is approved)
@@ -47,26 +47,47 @@ TEST_FILE_TO_IGNORE = {
 }
 
 
-def get_mapping_for_task(task):
+def get_framework(test_class):
+    """Infer the framework from the test class `test_class`."""
+
+    if "ModelTesterMixin" in [x.__name__ for x in test_class.__bases__]:
+        return "pt"
+    elif "TFModelTesterMixin" in [x.__name__ for x in test_class.__bases__]:
+        return "tf"
+    elif "FlaxModelTesterMixin" in [x.__name__ for x in test_class.__bases__]:
+        return "flax"
+    else:
+        return None
+
+
+def get_mapping_for_task(task, framework):
     """Get mappings defined in `XXXPipelineTests` for the task `task`."""
     # Use the cached results
-    if PIPELINE_TEST_MAPPING[task] is not None:
-        return PIPELINE_TEST_MAPPING[task]
+    if PIPELINE_TEST_MAPPING[task].get(framework, None) is not None:
+        return PIPELINE_TEST_MAPPING[task][framework]
 
     pipeline_test_class = pipeline_test_mapping[task]["test"]
-    mapping = getattr(pipeline_test_class, "model_mapping", None)
+    mapping = None
+
+    if framework == "pt":
+        mapping = getattr(pipeline_test_class, "model_mapping", None)
+    elif framework == "tf":
+        mapping = getattr(pipeline_test_class, "tf_model_mapping", None)
 
     if mapping is not None:
         mapping = dict(mapping.items())
 
     # cache the results
-    PIPELINE_TEST_MAPPING[task] = mapping
+    PIPELINE_TEST_MAPPING[task][framework] = mapping
     return mapping
 
 
 def get_model_for_pipeline_test(test_class, task):
     """Get the model architecture(s) related to the test class `test_class` for a pipeline `task`."""
-    mapping = get_mapping_for_task(task)
+    framework = get_framework(test_class)
+    if framework is None:
+        return None
+    mapping = get_mapping_for_task(task, framework)
     if mapping is None:
         return None
 
@@ -95,7 +116,11 @@ def get_pipeline_model_mapping_string(test_class):
 
     This will be a 1-line string. After this is added to a test file, `make style` will format it beautifully.
     """
+    framework = get_framework(test_class)
+    if framework == "pt":
+        framework = "torch"
     default_value = "{}"
+
     mapping = get_pipeline_model_mapping(test_class)
     if len(mapping) == 0:
         return ""
@@ -110,16 +135,17 @@ def get_pipeline_model_mapping_string(test_class):
             value = model_classes.__name__
         texts.append(f'"{task}": {value}')
     text = "{" + ", ".join(texts) + "}"
-    text = f"pipeline_model_mapping = {text} if is_torch_available() else {default_value}"
+    text = f"pipeline_model_mapping = {text} if is_{framework}_available() else {default_value}"
 
     return text
 
 
 def is_valid_test_class(test_class):
     """Restrict to `XXXModelTesterMixin` and should be a subclass of `unittest.TestCase`."""
+    base_class_names = {"ModelTesterMixin", "TFModelTesterMixin", "FlaxModelTesterMixin"}
     if not issubclass(test_class, unittest.TestCase):
         return False
-    return "ModelTesterMixin" in [x.__name__ for x in test_class.__bases__]
+    return len(base_class_names.intersection([x.__name__ for x in test_class.__bases__])) > 0
 
 
 def find_test_class(test_file):
@@ -299,7 +325,9 @@ if __name__ == "__main__":
     else:
         pattern = os.path.join("tests", "models", "**", "test_modeling_*.py")
         for test_file in glob.glob(pattern):
-            test_files.append(test_file)
+            # `Flax` is not concerned at this moment
+            if not test_file.startswith("test_modeling_flax_"):
+                test_files.append(test_file)
 
     for test_file in test_files:
         if test_file in TEST_FILE_TO_IGNORE:

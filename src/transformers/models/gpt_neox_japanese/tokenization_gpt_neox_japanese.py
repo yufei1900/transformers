@@ -23,7 +23,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...tokenization_python import PreTrainedTokenizer
+from ...tokenization_utils_fast import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -135,7 +135,6 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             do_clean_text=do_clean_text,
-            special_tokens_pattern="none",
             **kwargs,
         )
 

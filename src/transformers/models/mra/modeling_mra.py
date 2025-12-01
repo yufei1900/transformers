@@ -15,13 +15,14 @@
 """PyTorch MRA model."""
 
 import math
+from pathlib import Path
 from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.utils.cpp_extension import load
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -33,15 +34,8 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import (
-    auto_docstring,
-    is_cuda_platform,
-    is_kernels_available,
-    is_ninja_available,
-    is_torch_cuda_available,
-    logging,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import auto_docstring, is_cuda_platform, is_ninja_available, is_torch_cuda_available, logging
 from .configuration_mra import MraConfig
 
 
@@ -52,11 +46,14 @@ mra_cuda_kernel = None
 
 def load_cuda_kernels():
     global mra_cuda_kernel
-    if not is_kernels_available():
-        raise ImportError("kernels is not installed, please install it with `pip install kernels`")
-    from kernels import get_kernel
+    src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "mra"
 
-    mra_cuda_kernel = get_kernel("kernels-community/mra")
+    def append_root(files):
+        return [src_folder / file for file in files]
+
+    src_files = append_root(["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"])
+
+    mra_cuda_kernel = load("cuda_kernel", src_files, verbose=True)
 
 
 def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
@@ -472,11 +469,14 @@ class MraEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings + 2, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "token_type_ids",
             torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
@@ -508,18 +508,18 @@ class MraEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
         embeddings = inputs_embeds + token_type_embeddings
-
-        position_embeddings = self.position_embeddings(position_ids)
-        embeddings += position_embeddings
-
+        if self.position_embedding_type == "absolute":
+            position_embeddings = self.position_embeddings(position_ids)
+            embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
 
 class MraSelfAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -543,6 +543,9 @@ class MraSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.position_embedding_type = (
+            position_embedding_type if position_embedding_type is not None else config.position_embedding_type
+        )
 
         self.num_block = (config.max_position_embeddings // 32) * config.block_per_row
         self.num_block = min(self.num_block, int((config.max_position_embeddings // 32) ** 2))
@@ -630,10 +633,29 @@ class MraSelfOutput(nn.Module):
 
 
 class MraAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = MraSelfAttention(config)
+        self.self = MraSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = MraSelfOutput(config)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.self.query = prune_linear_layer(self.self.query, index)
+        self.self.key = prune_linear_layer(self.self.key, index)
+        self.self.value = prune_linear_layer(self.self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states, attention_mask=None):
         self_outputs = self.self(hidden_states, attention_mask)
@@ -713,6 +735,7 @@ class MraEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        head_mask=None,
         output_hidden_states=False,
         return_dict=True,
     ):
@@ -763,8 +786,15 @@ class MraLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -790,12 +820,24 @@ class MraPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mra"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, MraLMPredictionHead):
-            init.zeros_(module.bias)
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, MraLMPredictionHead):
+            module.bias.data.zero_()
 
 
 @auto_docstring
@@ -816,6 +858,14 @@ class MraModel(MraPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
+
     @auto_docstring
     def forward(
         self,
@@ -823,6 +873,7 @@ class MraModel(MraPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -860,6 +911,13 @@ class MraModel(MraPreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -869,6 +927,7 @@ class MraModel(MraPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
+            head_mask=head_mask,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -887,10 +946,7 @@ class MraModel(MraPreTrainedModel):
 
 @auto_docstring
 class MraForMaskedLM(MraPreTrainedModel):
-    _tied_weights_keys = {
-        "cls.predictions.decoder.bias": "cls.predictions.bias",
-        "cls.predictions.decoder.weight": "mra.embeddings.word_embeddings.weight",
-    }
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -915,6 +971,7 @@ class MraForMaskedLM(MraPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -933,6 +990,7 @@ class MraForMaskedLM(MraPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1003,6 +1061,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1021,6 +1080,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1082,6 +1142,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1135,6 +1196,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1185,6 +1247,7 @@ class MraForTokenClassification(MraPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1201,6 +1264,7 @@ class MraForTokenClassification(MraPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1258,6 +1322,7 @@ class MraForQuestionAnswering(MraPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -1271,6 +1336,7 @@ class MraForQuestionAnswering(MraPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

@@ -56,11 +56,11 @@ from transformers.testing_utils import (
     require_pytesseract,
     require_timm,
     require_torch,
+    require_torch_or_tf,
     require_vision,
 )
 from transformers.utils import direct_transformers_import, logging
 
-from .pipelines.test_pipelines_any_to_any import AnyToAnyPipelineTests
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
@@ -106,7 +106,6 @@ pipeline_test_mapping = {
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
-    "any-to-any": {"test": AnyToAnyPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
     "question-answering": {"test": QAPipelineTests},
     "summarization": {"test": SummarizationPipelineTests},
@@ -144,6 +143,7 @@ for task_info in pipeline_test_mapping.values():
     test = task_info["test"]
     task_info["mapping"] = {
         "pt": getattr(test, "model_mapping", None),
+        "tf": getattr(test, "tf_model_mapping", None),
     }
 
 
@@ -171,6 +171,7 @@ logger = logging.get_logger(__name__)
 class PipelineTesterMixin:
     model_tester = None
     pipeline_model_mapping = None
+    supported_frameworks = ["pt", "tf"]
 
     def run_task_tests(self, task, dtype="float32"):
         """Run pipeline tests for a specific `task`
@@ -198,6 +199,12 @@ class PipelineTesterMixin:
         for model_architecture in model_architectures:
             model_arch_name = model_architecture.__name__
             model_type = model_architecture.config_class.model_type
+
+            # Get the canonical name
+            for _prefix in ["Flax", "TF"]:
+                if model_arch_name.startswith(_prefix):
+                    model_arch_name = model_arch_name[len(_prefix) :]
+                    break
 
             if model_arch_name not in tiny_model_summary:
                 continue
@@ -555,7 +562,7 @@ class PipelineTesterMixin:
         self.run_task_tests(task="fill-mask", dtype="float16")
 
     @is_pipeline_test
-    @require_torch
+    @require_torch_or_tf
     @require_vision
     def test_pipeline_image_classification(self):
         self.run_task_tests(task="image-classification")
@@ -591,18 +598,6 @@ class PipelineTesterMixin:
     @require_torch
     def test_pipeline_image_text_to_text_fp16(self):
         self.run_task_tests(task="image-text-to-text", dtype="float16")
-
-    @is_pipeline_test
-    @require_vision
-    @require_torch
-    def test_pipeline_any_to_any(self):
-        self.run_task_tests(task="any-to-any")
-
-    @is_pipeline_test
-    @require_vision
-    @require_torch
-    def test_pipeline_any_to_any_fp16(self):
-        self.run_task_tests(task="any-to-any", dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -703,7 +698,7 @@ class PipelineTesterMixin:
         self.run_task_tests(task="text-classification", dtype="float16")
 
     @is_pipeline_test
-    @require_torch
+    @require_torch_or_tf
     def test_pipeline_text_generation(self):
         self.run_task_tests(task="text-generation")
 
@@ -741,7 +736,7 @@ class PipelineTesterMixin:
         self.run_task_tests(task="translation", dtype="float16")
 
     @is_pipeline_test
-    @require_torch
+    @require_torch_or_tf
     @require_vision
     @require_av
     def test_pipeline_video_classification(self):

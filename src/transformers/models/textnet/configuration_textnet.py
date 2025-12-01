@@ -14,7 +14,7 @@
 # limitations under the License.
 """TextNet model configuration"""
 
-from transformers import PreTrainedConfig
+from transformers import PretrainedConfig
 from transformers.utils import logging
 from transformers.utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -22,13 +22,13 @@ from transformers.utils.backbone_utils import BackboneConfigMixin, get_aligned_o
 logger = logging.get_logger(__name__)
 
 
-class TextNetConfig(BackboneConfigMixin, PreTrainedConfig):
+class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TextNextModel`]. It is used to instantiate a
     TextNext model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [czczup/textnet-base](https://huggingface.co/czczup/textnet-base). Configuration objects inherit from
-    [`PreTrainedConfig`] and can be used to control the model outputs.Read the documentation from [`PreTrainedConfig`]
+    [`PretrainedConfig`] and can be used to control the model outputs.Read the documentation from [`PretrainedConfig`]
     for more information.
 
     Args:

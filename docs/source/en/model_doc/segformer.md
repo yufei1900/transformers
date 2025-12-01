@@ -95,6 +95,12 @@ processor = SegformerImageProcessor(do_reduce_labels=True)
 
 [[autodoc]] SegformerConfig
 
+## SegformerFeatureExtractor
+
+[[autodoc]] SegformerFeatureExtractor
+    - __call__
+    - post_process_semantic_segmentation
+
 ## SegformerImageProcessor
 
 [[autodoc]] SegformerImageProcessor

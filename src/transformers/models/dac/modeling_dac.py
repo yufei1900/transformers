@@ -23,7 +23,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ... import initialization as init
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
@@ -478,17 +477,16 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "dac"
     main_input_name = "input_values"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):
-            init.trunc_normal_(module.weight, std=0.02)
-            init.constant_(module.bias, 0)
+            nn.init.trunc_normal_(module.weight, std=0.02)
+            nn.init.constant_(module.bias, 0)
         elif isinstance(module, Snake1d):
-            init.ones_(module.alpha)
+            module.alpha.data.fill_(1.0)
         elif isinstance(module, nn.ConvTranspose1d):
             module.reset_parameters()
         elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=0.02)
+            module.weight.data.normal_(mean=0.0, std=0.02)
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
@@ -559,8 +557,6 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
     """
 )
 class DacModel(DacPreTrainedModel):
-    input_modalities = "audio"
-
     def __init__(self, config: DacConfig):
         super().__init__(config)
         self.config = config

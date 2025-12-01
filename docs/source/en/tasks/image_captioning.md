@@ -169,7 +169,7 @@ def compute_metrics(eval_pred):
     return {"wer_score": wer_score}
 ```
 
-## Train
+## Train!
 
 Now, you are ready to start fine-tuning the model. You will use the 🤗 [`Trainer`] for this.
 
@@ -247,9 +247,9 @@ image
 Prepare image for the model.
 
 ```python
-from accelerate import Accelerator
+from transformers import infer_device
 
-device = Accelerator().device
+device = infer_device()
 inputs = processor(images=image, return_tensors="pt").to(device)
 pixel_values = inputs.pixel_values
 ```

@@ -95,6 +95,10 @@ class CsmProcessor(ProcessorMixin):
 
     """
 
+    attributes = ["feature_extractor", "tokenizer"]
+    feature_extractor_class = "EncodecFeatureExtractor"
+    tokenizer_class = "PreTrainedTokenizerFast"
+
     def __init__(
         self,
         feature_extractor,
@@ -221,8 +225,10 @@ class CsmProcessor(ProcessorMixin):
                 The ratio of audio frames to keep for the depth decoder labels.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
                     - `'pt'`: Return PyTorch `torch.Tensor` objects.
                     - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -242,7 +248,9 @@ class CsmProcessor(ProcessorMixin):
 
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.get("return_tensors", None)
+        common_kwargs = output_kwargs["common_kwargs"]
+
+        return_tensors = common_kwargs.pop("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 

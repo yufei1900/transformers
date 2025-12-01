@@ -38,11 +38,10 @@ This model was contributed by [Stella Biderman](https://huggingface.co/stellaath
   which could be used to further minimize the RAM usage:
 
 ```python
->>> from transformers import GPTJForCausalLM
-from accelerate import Accelerator
+>>> from transformers import GPTJForCausalLM, infer_device
 >>> import torch
 
->>> device = Accelerator().device
+>>> device = infer_device()
 >>> model = GPTJForCausalLM.from_pretrained(
 ...     "EleutherAI/gpt-j-6B",
 ...     revision="float16",
@@ -94,11 +93,10 @@ model.
 ...or in float16 precision:
 
 ```python
->>> from transformers import GPTJForCausalLM, AutoTokenizer
-from accelerate import Accelerator
+>>> from transformers import GPTJForCausalLM, AutoTokenizer, infer_device
 >>> import torch
 
->>> device = Accelerator().device
+>>> device = infer_device()
 >>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", dtype=torch.float16).to(device)
 >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 

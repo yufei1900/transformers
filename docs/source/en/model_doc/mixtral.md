@@ -198,9 +198,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] MixtralConfig
 
-## MistralCommonBackend
+## MistralCommonTokenizer
 
-[[autodoc]] MistralCommonBackend
+[[autodoc]] MistralCommonTokenizer
 
 ## MixtralModel
 
@@ -223,6 +223,5 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - forward
 
 ## MixtralForQuestionAnswering
-
 [[autodoc]] MixtralForQuestionAnswering
     - forward

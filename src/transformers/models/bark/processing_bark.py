@@ -49,6 +49,9 @@ class BarkProcessor(ProcessorMixin):
 
     """
 
+    tokenizer_class = "AutoTokenizer"
+    attributes = ["tokenizer"]
+
     preset_shape = {
         "semantic_prompt": 1,  # 1D array of shape (X,)
         "coarse_prompt": 2,  # 2D array of shape (2,X)
@@ -82,7 +85,7 @@ class BarkProcessor(ProcessorMixin):
                 Additional keyword arguments passed along to both
                 [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
         """
-        token = kwargs.get("token")
+
         if speaker_embeddings_dict_path is not None:
             speaker_embeddings_path = cached_file(
                 pretrained_processor_name_or_path,
@@ -91,8 +94,9 @@ class BarkProcessor(ProcessorMixin):
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
                 proxies=kwargs.pop("proxies", None),
+                resume_download=kwargs.pop("resume_download", None),
                 local_files_only=kwargs.pop("local_files_only", False),
-                token=token,
+                token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
@@ -178,7 +182,6 @@ class BarkProcessor(ProcessorMixin):
         voice_preset_paths = self.speaker_embeddings[voice_preset]
 
         voice_preset_dict = {}
-        token = kwargs.get("token")
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset_paths:
                 raise ValueError(
@@ -192,8 +195,9 @@ class BarkProcessor(ProcessorMixin):
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
                 proxies=kwargs.pop("proxies", None),
+                resume_download=kwargs.pop("resume_download", None),
                 local_files_only=kwargs.pop("local_files_only", False),
-                token=token,
+                token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,

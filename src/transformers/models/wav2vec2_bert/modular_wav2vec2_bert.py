@@ -5,7 +5,6 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -581,46 +580,44 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2BertConfig
     base_model_prefix = "wav2vec2_bert"
     main_input_name = "input_features"
-    input_modalities = "audio"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, Wav2Vec2BertSelfAttention):
             if hasattr(module, "pos_bias_u"):
-                init.xavier_uniform_(module.pos_bias_u)
+                nn.init.xavier_uniform_(module.pos_bias_u)
             if hasattr(module, "pos_bias_v"):
-                init.xavier_uniform_(module.pos_bias_v)
+                nn.init.xavier_uniform_(module.pos_bias_v)
         elif isinstance(module, Wav2Vec2BertFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            init.uniform_(module.projection.weight, a=-k, b=k)
-            init.uniform_(module.projection.bias, a=-k, b=k)
+            nn.init.uniform_(module.projection.weight, a=-k, b=k)
+            nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            init.kaiming_normal_(module.weight)
+            nn.init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                init.uniform_(module.bias, a=-k, b=k)
+                nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, Wav2Vec2BertModel):
             if hasattr(module, "masked_spec_embed"):
-                init.uniform_(module.masked_spec_embed)
+                module.masked_spec_embed.data.uniform_()
         elif isinstance(
             module,
             (Wav2Vec2BertForSequenceClassification, Wav2Vec2BertForAudioFrameClassification, Wav2Vec2BertForXVector),
         ):
             if hasattr(module, "layer_weights"):
-                init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
+                module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
         elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
-            init.normal_(module.weight)
+            module.weight.data.normal_()
 
     # Ignore copy
     def _get_feat_extract_output_lengths(
@@ -690,6 +687,9 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def freeze_feature_extractor(self):
+        raise AttributeError("Not needed for Wav2Vec2Bert")
 
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
@@ -836,6 +836,9 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
     def __init__(self, config):
         super().__init__(config)
+
+    def freeze_feature_extractor(self):
+        raise AttributeError("Not needed for Wav2Vec2Bert")
 
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")

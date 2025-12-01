@@ -54,7 +54,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.57.0.dev0")
+check_min_version("4.57.0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -933,7 +933,7 @@ def main():
             all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
             all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
-    max_len = max(x.shape[1] for x in all_end_top_log_probs)  # Get the max_length of the tensor
+    max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 
     # concatenate all numpy arrays collected above
     start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, eval_dataset, max_len)
@@ -993,7 +993,7 @@ def main():
                 all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
                 all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
-        max_len = max(x.shape[1] for x in all_end_top_log_probs)  # Get the max_length of the tensor
+        max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 
         # concatenate all numpy arrays collected above
         start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, predict_dataset, max_len)

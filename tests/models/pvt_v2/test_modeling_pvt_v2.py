@@ -149,7 +149,10 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    test_head_masking = False
+    test_pruning = False
     test_resize_embeddings = False
+    test_torchscript = False
     has_attentions = False
     test_torch_exportable = True
 

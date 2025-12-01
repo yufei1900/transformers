@@ -61,7 +61,9 @@ Blender チャットボット モデルは、[Recipes for building an open-domai
 ## BlenderbotSmallTokenizer
 
 [[autodoc]] BlenderbotSmallTokenizer
+    - build_inputs_with_special_tokens
     - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## BlenderbotSmallTokenizerFast
@@ -82,3 +84,27 @@ Blender チャットボット モデルは、[Recipes for building an open-domai
 
 [[autodoc]] BlenderbotSmallForCausalLM
     - forward
+
+## TFBlenderbotSmallModel
+
+[[autodoc]] TFBlenderbotSmallModel
+    - call
+
+## TFBlenderbotSmallForConditionalGeneration
+
+[[autodoc]] TFBlenderbotSmallForConditionalGeneration
+    - call
+
+## FlaxBlenderbotSmallModel
+
+[[autodoc]] FlaxBlenderbotSmallModel
+    - __call__
+    - encode
+    - decode
+
+## FlaxBlenderbotForConditionalGeneration
+
+[[autodoc]] FlaxBlenderbotSmallForConditionalGeneration
+    - __call__
+    - encode
+    - decode

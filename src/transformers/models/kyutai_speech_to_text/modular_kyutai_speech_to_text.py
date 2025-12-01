@@ -105,6 +105,7 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -252,7 +253,6 @@ class KyutaiSpeechToTextModel(MoshiModel):
 
 class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
     _keep_in_fp32_modules_strict = ["codec_model"]
-    output_modalities = ("audio", "text")
 
     def __init__(self, config):
         super().__init__(config)

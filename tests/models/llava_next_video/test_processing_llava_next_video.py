@@ -13,11 +13,13 @@
 # limitations under the License.
 
 import json
+import shutil
+import tempfile
 import unittest
 
 import torch
 
-from transformers import LlavaNextVideoProcessor
+from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextVideoProcessor
 from transformers.testing_utils import require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
@@ -25,8 +27,10 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
+    from transformers import LlavaNextImageProcessor
+
     if is_torchvision_available():
-        pass
+        from transformers import LlavaNextVideoVideoProcessor
 
 
 @require_vision
@@ -34,16 +38,33 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaNextVideoProcessor
 
     @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
+        image_processor = LlavaNextImageProcessor()
+        video_processor = LlavaNextVideoVideoProcessor()
+        tokenizer = LlamaTokenizerFast.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
-        return tokenizer
+        processor_kwargs = cls.prepare_processor_dict()
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
+        processor = LlavaNextVideoProcessor(
+            video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
+        )
+        processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+
+    def get_tokenizer(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+
+    def get_image_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    def get_video_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @classmethod
     def prepare_processor_dict(cls):

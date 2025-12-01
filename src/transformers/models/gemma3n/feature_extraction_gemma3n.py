@@ -296,7 +296,7 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of (`int`, *optional*, defaults to 128):
                 When padding, pad to a multiple of this value. The default value is defined for optimal TPU support.
             return_tensors (`Union[str, TensorType]`, *optional*, defaults to `None`):
-                The type of tensors to return (e.g., NumPy, or Torch).
+                The type of tensors to return (e.g., NumPy, Torch, JAX, TensorFlow).
             return_attention_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return the attention mask for the generated MEL spectrograms.
         """
@@ -305,10 +305,13 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         is_batched_sequence = isinstance(raw_speech, Sequence) and isinstance(raw_speech[0], (np.ndarray, Sequence))
         is_batched = is_batched_numpy or is_batched_sequence
 
-        # Always return a batch
-        if not is_batched:
-            raw_speech = [raw_speech]
-        raw_speech = [np.asarray([rs]).T for rs in raw_speech]
+        if is_batched:
+            raw_speech = [np.asarray([rs]).T for rs in raw_speech]
+        elif not is_batched and not isinstance(raw_speech, np.ndarray):
+            raw_speech = np.asarray(raw_speech)
+
+        if not is_batched:  # always return a batch
+            raw_speech = [np.asarray([raw_speech])]
 
         batched_speech = self.pad(
             BatchFeature({"input_features": raw_speech}),

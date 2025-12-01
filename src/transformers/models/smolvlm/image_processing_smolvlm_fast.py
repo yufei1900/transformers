@@ -25,7 +25,13 @@ from typing import Optional, Union
 import torch
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    SizeDict,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -35,7 +41,6 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
-from .image_processing_smolvlm import SmolVLMImageProcessorKwargs
 
 
 if is_torchvision_available():
@@ -43,6 +48,23 @@ if is_torchvision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class SmolVLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split the image into sub-images concatenated with the original image. They are split into patches
+        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return the row and column information of the images.
+    """
+
+    do_image_splitting: Optional[bool]
+    max_image_size: Optional[dict[str, int]]
+    return_row_col_info: Optional[bool]
+
 
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
@@ -167,7 +189,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
     do_image_splitting = True
     do_pad = True
     return_row_col_info = False
-    valid_kwargs = SmolVLMImageProcessorKwargs
+    valid_kwargs = SmolVLMFastImageProcessorKwargs
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         """
@@ -335,7 +357,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         return image, pixel_mask
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[SmolVLMImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[SmolVLMFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(

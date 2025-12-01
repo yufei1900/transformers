@@ -11,8 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from functools import cached_property
+from typing import TYPE_CHECKING, Optional, Union
+
+from packaging import version
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -23,7 +27,6 @@ if TYPE_CHECKING:
 
 from ..utils import (
     ACCELERATE_MIN_VERSION,
-    BITSANDBYTES_MIN_VERSION,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
@@ -37,7 +40,6 @@ from ..utils import (
 if is_torch_available():
     import torch
 
-    from ..core_model_loading import WeightConverter
     from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
@@ -45,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 class Bnb4BitHfQuantizer(HfQuantizer):
     """
-    4-bit quantization from bitsandbytes quantization method:
+    4-bit quantization from bitsandbytes.py quantization method:
         before loading: converts transformer layers into Linear4bit during loading: load 16bit weight and pass to the
         layer object after: quantizes individual weights in Linear4bit into 4bit at the first .cuda() call
         saving:
@@ -78,16 +80,37 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
             raise ImportError(
-                f"Using `bitsandbytes` 4-bit quantization requires accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
-        if not is_bitsandbytes_available():
+        if not is_bitsandbytes_available(check_library_only=True):
             raise ImportError(
-                f"Using `bitsandbytes` 4-bit quantization requires bitsandbytes: `pip install -U bitsandbytes>={BITSANDBYTES_MIN_VERSION}`"
+                "Using `bitsandbytes` 4-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
+        if not is_torch_available():
+            raise ImportError(
+                "The bitsandbytes library requires PyTorch but it was not found in your environment. "
+                "You can install it with `pip install torch`."
+            )
+        # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
+        # so those versions of the library are practically only available when CUDA is too.
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+            if not torch.cuda.is_available():
+                raise ImportError(
+                    "The installed version of bitsandbytes (<0.43.1) requires CUDA, but CUDA is not available. "
+                    "You may need to install PyTorch with CUDA support or upgrade bitsandbytes to >=0.43.1."
+                )
 
         from ..integrations import validate_bnb_backend_availability
+        from ..utils import is_bitsandbytes_multi_backend_available
 
+        bnb_multibackend_is_enabled = is_bitsandbytes_multi_backend_available()
         validate_bnb_backend_availability(raise_exception=True)
+
+        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
+            raise ValueError(
+                "Converting into 4-bit or 8-bit weights from tf/flax weights is currently not supported, please make"
+                " sure the weights are in PyTorch format."
+            )
 
         device_map = kwargs.get("device_map")
         if (
@@ -98,7 +121,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             device_map_without_lm_head = {
                 key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
             }
-            if set(device_map.values()) == {"cpu"}:
+            if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
                 pass
             elif "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(
@@ -111,11 +134,19 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 )
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        from accelerate.utils import CustomDtype
+        if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
+            from accelerate.utils import CustomDtype
 
-        if target_dtype != torch.int8:
-            logger.info("target_dtype {target_dtype} is replaced by `CustomDtype.INT4` for 4-bit BnB quantization")
-        return CustomDtype.INT4
+            if target_dtype != torch.int8:
+                logger.info("target_dtype {target_dtype} is replaced by `CustomDtype.INT4` for 4-bit BnB quantization")
+            return CustomDtype.INT4
+        else:
+            raise ValueError(
+                "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
+                " the appropriate device map, you should upgrade your `accelerate` library,"
+                "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
+                "calculation. You may encounter unexpected behavior, or pass your own device map"
+            )
 
     def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
         return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.bnb_keys)]
@@ -172,13 +203,17 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
             # We are ready for quantization in this case (note, the +1 is for the weight itself)
             if len(self.param_quant_stats[module_name]) == len(self.bnb_keys) + 1:
+                param_kwargs = {}
+                if self.is_bnb_supports_quant_storage_module:
+                    param_kwargs["module"] = module
+
                 weight = self.param_quant_stats[module_name].pop(f"{module_name}.weight")
                 new_value = bnb.nn.Params4bit.from_prequantized(
                     data=weight,
                     quantized_stats=self.param_quant_stats[module_name],
                     requires_grad=False,
                     device=target_device,
-                    module=module,
+                    **param_kwargs,
                 )
                 # Set it
                 module._parameters[tensor_name] = new_value
@@ -200,7 +235,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             module._parameters[tensor_name] = new_value
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.adjust_max_memory
-    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
+    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
@@ -243,7 +278,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: list[str] | None = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bnb_linear
@@ -265,11 +300,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     " converted to 8-bit but kept in 32-bit."
                 )
             self.modules_to_not_convert.extend(keys_on_cpu)
+
         model = replace_with_bnb_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
-            pre_quantized=self.pre_quantized,
+            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
 
         model.config.quantization_config = self.quantization_config
@@ -281,7 +314,25 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         return model
 
     def is_serializable(self, safe_serialization=None):
+        _is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
+
+        if not _is_4bit_serializable:
+            logger.warning(
+                "You are calling `save_pretrained` to a 4-bit converted model, but your `bitsandbytes` version doesn't support it. "
+                "If you want to save 4-bit models, make sure to have `bitsandbytes>=0.41.3` installed."
+            )
+            return False
+
         return True
+
+    @cached_property
+    def is_bnb_supports_quant_storage_module(self) -> bool:
+        """
+        determines if the current version of bitsandbytes supports
+        the `module` parameter in `Params4bit.from_prequantized`
+        :return:
+        """
+        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.43.3")
 
     @property
     def is_trainable(self) -> bool:
@@ -294,29 +345,3 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         return model
-
-    def get_quantize_ops(self):
-        from ..integrations.bitsandbytes import Bnb4bitQuantize
-
-        return Bnb4bitQuantize(self)
-
-    def get_weight_conversions(self):
-        from ..integrations.bitsandbytes import Bnb4bitDeserialize
-
-        if self.pre_quantized:
-            return [
-                WeightConverter(
-                    source_patterns=[
-                        "weight.nested_absmax",
-                        "weight.nested_quant_map",
-                        "weight.quant_map",
-                        "weight.absmax",
-                        "weight.quant_state.bitsandbytes__nf4",
-                        "weight.quant_state.bitsandbytes__fp4",
-                        "weight",
-                    ],
-                    target_patterns="weight",
-                    operations=[Bnb4bitDeserialize(self)],
-                )
-            ]
-        return []

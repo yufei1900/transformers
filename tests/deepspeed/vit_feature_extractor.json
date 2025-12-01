@@ -1,4 +1,4 @@
 {
-    "image_processor_type": "ViTImageProcessor",
+    "feature_extractor_type": "ViTFeatureExtractor",
     "size": 30
 }

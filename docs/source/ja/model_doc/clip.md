@@ -106,6 +106,7 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 ## CLIPConfig
 
 [[autodoc]] CLIPConfig
+    - from_text_vision_configs
 
 ## CLIPTextConfig
 
@@ -118,7 +119,9 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 ## CLIPTokenizer
 
 [[autodoc]] CLIPTokenizer
+    - build_inputs_with_special_tokens
     - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CLIPTokenizerFast
@@ -135,10 +138,16 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 [[autodoc]] CLIPImageProcessorFast
     - preprocess
 
+## CLIPFeatureExtractor
+
+[[autodoc]] CLIPFeatureExtractor
+
 ## CLIPProcessor
 
 [[autodoc]] CLIPProcessor
 
+<frameworkcontent>
+<pt>
 
 ## CLIPModel
 
@@ -166,3 +175,51 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 
 [[autodoc]] CLIPVisionModel
     - forward
+
+</pt>
+<tf>
+
+## TFCLIPModel
+
+[[autodoc]] TFCLIPModel
+    - call
+    - get_text_features
+    - get_image_features
+
+## TFCLIPTextModel
+
+[[autodoc]] TFCLIPTextModel
+    - call
+
+## TFCLIPVisionModel
+
+[[autodoc]] TFCLIPVisionModel
+    - call
+
+</tf>
+<jax>
+
+## FlaxCLIPModel
+
+[[autodoc]] FlaxCLIPModel
+    - __call__
+    - get_text_features
+    - get_image_features
+
+## FlaxCLIPTextModel
+
+[[autodoc]] FlaxCLIPTextModel
+    - __call__
+
+## FlaxCLIPTextModelWithProjection
+
+[[autodoc]] FlaxCLIPTextModelWithProjection
+    - __call__
+
+## FlaxCLIPVisionModel
+
+[[autodoc]] FlaxCLIPVisionModel
+    - __call__
+
+</jax>
+</frameworkcontent>

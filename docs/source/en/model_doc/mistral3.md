@@ -67,10 +67,9 @@ outputs[0]["generated_text"]
 
 ```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator 
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device 
 
-torch_device = Accelerator().device
+torch_device = infer_device()
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(
@@ -111,10 +110,9 @@ decoded_output
 
 ```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
-torch_device = Accelerator().device
+torch_device = infer_device()
 model_checkpoint = ".mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
@@ -152,10 +150,9 @@ print(decoded_output)
 
 ```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
-torch_device = Accelerator().device
+torch_device = infer_device()
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
@@ -196,10 +193,9 @@ messages = [
 
 ```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
-from accelerate import Accelerator
+from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig, infer_device
 
-torch_device = Accelerator().device
+torch_device = infer_device()
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
@@ -242,9 +238,9 @@ messages = [
 
 [[autodoc]] Mistral3Config
 
-## MistralCommonBackend
+## MistralCommonTokenizer
 
-[[autodoc]] MistralCommonBackend
+[[autodoc]] MistralCommonTokenizer
 
 ## Mistral3Model
 

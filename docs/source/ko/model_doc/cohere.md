@@ -115,7 +115,15 @@ print(gen_text)
 ## CohereConfig[[transformers.CohereConfig]]
 
 [[autodoc]] CohereConfig
-ave_vocabulary
+
+## CohereTokenizerFast[[transformers.CohereTokenizerFast]]
+
+[[autodoc]] CohereTokenizerFast
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - update_post_processor
+    - save_vocabulary
 
 ## CohereModel[[transformers.CohereModel]]
 

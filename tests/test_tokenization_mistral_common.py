@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import base64
 import gc
-import io
 import tempfile
 import unittest
 
@@ -24,7 +22,7 @@ import torch
 from transformers.image_utils import load_image
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import require_mistral_common
-from transformers.tokenization_mistral_common import MistralCommonBackend
+from transformers.tokenization_mistral_common import MistralCommonTokenizer
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils import PaddingStrategy, is_mistral_common_available
 
@@ -33,12 +31,10 @@ if is_mistral_common_available():
     import mistral_common.tokens.tokenizers
     from mistral_common.exceptions import InvalidMessageStructureException
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
-    from mistral_common.protocol.transcription.request import TranscriptionRequest
-    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
 
-    # To avoid unnecessary `httpx.get` calls which give us `Error: Too Many Requests for url` on CircleCI
+    # To avoid unnecessary `requests.get` calls which give us `Error: Too Many Requests for url` on CircleCI
     mistral_common.tokens.tokenizers.image.download_image = load_image
 
 
@@ -63,7 +59,7 @@ AUDIO_BASE_64 = """//uUxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAHNAAFFIAACAwQGBwkLD
 
 
 @require_mistral_common
-class TestMistralCommonBackend(unittest.TestCase):
+class TestMistralCommonTokenizer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -72,7 +68,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         # determine if we already have this downloaded
         cls.local_files_only = len(list_local_hf_repo_files(cls.repo_id, revision=None)) > 0
 
-        cls.tokenizer: MistralCommonBackend = AutoTokenizer.from_pretrained(
+        cls.tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
             cls.repo_id,
             tokenizer_type="mistral",
             local_files_only=cls.local_files_only,
@@ -83,22 +79,18 @@ class TestMistralCommonBackend(unittest.TestCase):
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
             cls.repo_id, local_files_only=cls.local_files_only
         )
-
-        # Define SPM tokenizer to test the private methods that handle SPM and Tekken differencies.
-        cls.spm_repo_id = "mistralai/Mistral-7B-v0.3"
-
-        # cls.tokenizer_audio: MistralCommonBackend = AutoTokenizer.from_pretrained(
+        # cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
         # )
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
         local_files_only = len(list_local_hf_repo_files(repo_id, revision=None)) > 0
 
-        cls.tokenizer_audio: MistralCommonBackend = AutoTokenizer.from_pretrained(
+        cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
             repo_id,
             local_files_only=local_files_only,
             revision=None,
         )
-        cls.ref_tokenizer_audio: MistralCommonBackend = MistralTokenizer.from_hf_hub(
+        cls.ref_tokenizer_audio: MistralCommonTokenizer = MistralTokenizer.from_hf_hub(
             repo_id, local_files_only=local_files_only
         )
 
@@ -132,53 +124,12 @@ class TestMistralCommonBackend(unittest.TestCase):
         del cls.ref_special_ids
         gc.collect()
 
-    # Copy paste of `MistralCommonBackend._tekken_piece_to_id`
     def _ref_piece_to_id(self, piece: str) -> int:
-        tekken_tokenizer = self.ref_tokenizer.instruct_tokenizer.tokenizer
-
-        piece_bytes = piece.encode("utf-8")
-        shift = tekken_tokenizer.num_special_tokens
-        try:
-            return shift + tekken_tokenizer._tekken_token2id_nospecial[piece_bytes]
-        except KeyError:
-            piece_str = piece_bytes.decode("utf-8")
-            if piece_str in tekken_tokenizer._special_tokens_reverse_vocab:
-                return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
-            return tekken_tokenizer.unk_id
-
-    def _get_spm_tokenizer(self) -> MistralCommonBackend:
-        local_files_only = len(list_local_hf_repo_files(self.spm_repo_id, revision=None)) > 0
-        return AutoTokenizer.from_pretrained(
-            self.spm_repo_id,
-            local_files_only=local_files_only,
-            revision=None,
-            tokenizer_type="mistral",
+        pieces = self.ref_tokenizer.instruct_tokenizer.tokenizer._model.encode(
+            piece, allowed_special="all", disallowed_special=set()
         )
-
-    def test_spm_vs_tekken_is_control_token(self):
-        spm_tokenizer = self._get_spm_tokenizer()
-        self.assertTrue(spm_tokenizer._is_control_token(1))
-        self.assertTrue(spm_tokenizer._is_control_token(768))
-        self.assertFalse(spm_tokenizer._is_control_token(2000))
-
-        self.assertTrue(self.tokenizer._is_control_token(0))
-        self.assertTrue(self.tokenizer._is_control_token(768))
-        self.assertTrue(self.tokenizer._is_control_token(999))
-        self.assertFalse(self.tokenizer._is_control_token(1000))
-
-    def test_spm_vs_tekken_piece_to_id(self):
-        spm_tokenizer = self._get_spm_tokenizer()
-        self.assertEqual(spm_tokenizer._piece_to_id("<s>", False), 1)
-        self.assertEqual(spm_tokenizer._piece_to_id("h", False), 29484)
-
-        self.assertEqual(self.tokenizer._piece_to_id("<s>", False), 1)
-        self.assertEqual(self._ref_piece_to_id("<s>"), 1)
-        self.assertEqual(self.tokenizer._piece_to_id("\u0000", False), 1000)
-        self.assertEqual(self._ref_piece_to_id("\u0000"), 1000)
-        self.assertEqual(self.tokenizer._piece_to_id(" String", False), 3000)
-        self.assertEqual(self._ref_piece_to_id(" String"), 3000)
-        self.assertEqual(self.tokenizer._piece_to_id("后汉书", False), 131071)
-        self.assertEqual(self._ref_piece_to_id("后汉书"), 131071)
+        assert len(pieces) == 1, f"Expected to decode 1 token, got {len(pieces)}"
+        return pieces[0]
 
     def test_vocab_size(self):
         self.assertEqual(self.tokenizer.vocab_size, self.ref_tokenizer.instruct_tokenizer.tokenizer.n_words)
@@ -186,7 +137,7 @@ class TestMistralCommonBackend(unittest.TestCase):
     def test_save_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             self.tokenizer.save_pretrained(tmp_dir)
-            loaded_tokenizer = MistralCommonBackend.from_pretrained(tmp_dir)
+            loaded_tokenizer = MistralCommonTokenizer.from_pretrained(tmp_dir)
 
         self.assertIsNotNone(loaded_tokenizer)
         self.assertEqual(self.tokenizer.get_vocab(), loaded_tokenizer.get_vocab())
@@ -196,7 +147,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         )
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.save_pretrained`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.save_pretrained`."
         ):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 self.tokenizer.save_pretrained(tmp_dir, unk_args="")
@@ -275,7 +226,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         # Test encode with unsupported kwargs
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.encode`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.encode`."
         ):
             self.tokenizer.encode("Hello, world!", add_special_tokens=True, unk_args="")
 
@@ -304,34 +255,9 @@ class TestMistralCommonBackend(unittest.TestCase):
         # Test 3:
         # decode with unsupported kwargs
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.decode`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.decode`."
         ):
             self.tokenizer.decode(tokens_ids, skip_special_tokens=False, unk_args="")
-
-    def test_decode_transcription_mode(self):
-        # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
-        # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
-        # we made the explicit choice of skipping "lang:xx" it to ease users life, see `[~MistralCommonBackend.decode]`
-        expected_string = "lang:en[TRANSCRIBE]"
-
-        openai_transcription_request = {
-            "model": None,
-            "language": "en",
-            "file": io.BytesIO(base64.b64decode(AUDIO_BASE_64)),
-        }
-        transcription_request = TranscriptionRequest.from_openai(openai_transcription_request)
-        tokenized_transcription_request = self.ref_tokenizer_audio.encode_transcription(transcription_request)
-
-        # without skip_special_tokens
-        self.assertEqual(
-            self.tokenizer_audio.decode(tokenized_transcription_request.tokens, skip_special_tokens=False)[
-                -len(expected_string) :
-            ],
-            expected_string,
-        )
-
-        # with skip_special_tokens
-        self.assertEqual(self.tokenizer.decode(tokenized_transcription_request.tokens, skip_special_tokens=True), "")
 
     def test_batch_decode(self):
         string = "Hello, world!"
@@ -360,7 +286,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         # Test 2:
         # batch_decode with unsupported kwargs
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_decode`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.batch_decode`."
         ):
             self.tokenizer.batch_decode(batch_tokens_ids, skip_special_tokens=False, unk_args="")
 
@@ -411,7 +337,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(tokens, expected_tokens)
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [add_special_tokens] are not supported by `MistralCommonBackend.tokenize`."
+            ValueError, msg="Kwargs [add_special_tokens] are not supported by `MistralCommonTokenizer.tokenize`."
         ):
             self.tokenizer.tokenize(string, add_special_tokens=True)
 
@@ -494,7 +420,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         # Test 4:
         # padding_side="right"
-        right_tokenizer = MistralCommonBackend.from_pretrained(
+        right_tokenizer = MistralCommonTokenizer.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             padding_side="right",
@@ -646,7 +572,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         # Test 4:
         # padding_side="right"
-        right_tokenizer = MistralCommonBackend.from_pretrained(
+        right_tokenizer = MistralCommonTokenizer.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             padding_side="right",
@@ -767,7 +693,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         # Test 6:
         # truncation_side="left"
-        left_tokenizer = MistralCommonBackend.from_pretrained(
+        left_tokenizer = MistralCommonTokenizer.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             truncation_side="left",
@@ -799,12 +725,10 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         # Test 2:
         # without tokenize
-        self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True).input_ids, expected_tokenized.tokens
-        )
+        self.assertEqual(self.tokenizer.apply_chat_template(conversation, tokenize=True), expected_tokenized.tokens)
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.apply_chat_template`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.apply_chat_template`."
         ):
             self.tokenizer.apply_chat_template(conversation, tokenize=True, unk_args="")
 
@@ -826,46 +750,12 @@ class TestMistralCommonBackend(unittest.TestCase):
             expected_tokenized.text,
         )
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True).input_ids,
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True),
             expected_tokenized.tokens,
         )
 
         with self.assertRaises(InvalidMessageStructureException):
             self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=False)
-
-    def test_apply_chat_template_with_add_generation_prompt(self):
-        conversation = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hi!"},
-        ]
-
-        # Test 1:
-        # with add_generation_prompt
-        for add_generation_prompt in [False, True]:
-            expected_tokenized = self.ref_tokenizer.encode_chat_completion(
-                ChatCompletionRequest.from_openai(conversation)
-            )
-            token_outputs = self.tokenizer.apply_chat_template(
-                conversation, tokenize=True, add_generation_prompt=add_generation_prompt
-            )
-            self.assertEqual(token_outputs.input_ids, expected_tokenized.tokens)
-
-        # Test 2:
-        # with continue_final_message
-        with self.assertRaises(ValueError):
-            self.tokenizer.apply_chat_template(
-                conversation, tokenize=True, add_generation_prompt=True, continue_final_message=True
-            )
-
-        # Test 3:
-        # with last message with assistant role
-        conversation = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hi!"},
-            {"role": "asistant", "content": "Hey!"},
-        ]
-        with self.assertRaises(ValueError):
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, add_generation_prompt=True)
 
     def test_apply_chat_template_with_tools(self):
         conversation = [
@@ -960,19 +850,20 @@ class TestMistralCommonBackend(unittest.TestCase):
                 },
             ]
 
-            output = self.tokenizer.apply_chat_template(conversation).input_ids
+            output = self.tokenizer.apply_chat_template(conversation, tokenize=True)
             self.assertEqual(output, expected_tokenized.tokens)
 
-        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True)
+        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True, return_dict=True)
         self.assertEqual(output_dict["input_ids"], expected_tokenized.tokens)
         self.assertEqual(len(output_dict["pixel_values"]), len(expected_tokenized.images))
         for o, e in zip(output_dict["pixel_values"], expected_tokenized.images):
             self.assertTrue(np.allclose(o, e))
 
-        output_dict = self.tokenizer.apply_chat_template(conversation, tokenize=True, return_tensors="pt")
+        output_dict = self.tokenizer.apply_chat_template(
+            conversation, tokenize=True, return_dict=True, return_tensors="pt"
+        )
         self.assertEqual(output_dict["input_ids"].tolist()[0], expected_tokenized.tokens)
-        expected_images_pt_tensor = torch.from_numpy(np.stack(expected_tokenized.images))
-        self.assertTrue(torch.allclose(output_dict["pixel_values"], expected_images_pt_tensor))
+        self.assertTrue(torch.allclose(output_dict["pixel_values"], torch.tensor(expected_tokenized.images)))
 
     def test_apply_chat_template_with_audio(self):
         ref_conversation = conversation = [
@@ -1013,7 +904,7 @@ class TestMistralCommonBackend(unittest.TestCase):
                 },
             ]
 
-            output = self.tokenizer_audio.apply_chat_template(conversation, tokenize=True).input_ids
+            output = self.tokenizer_audio.apply_chat_template(conversation, tokenize=True)
             self.assertEqual(output, expected_tokenized.tokens)
 
         output_dict = self.tokenizer_audio.apply_chat_template(conversation, tokenize=True, return_dict=True)
@@ -1028,7 +919,7 @@ class TestMistralCommonBackend(unittest.TestCase):
                 conversation, tokenize=True, return_dict=True, return_tensors="pt"
             )
 
-    def test_apply_chat_template_with_truncation(self):
+    def test_appsly_chat_template_with_truncation(self):
         conversation = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hi!"},
@@ -1041,20 +932,20 @@ class TestMistralCommonBackend(unittest.TestCase):
         # Test 1:
         # with truncation
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=True, max_length=20).input_ids,
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=True, max_length=20),
             expected_tokenized.tokens[:20],
         )
 
         # Test 2:
         # without truncation
         self.assertEqual(
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=False, max_length=20).input_ids,
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, truncation=False, max_length=20),
             expected_tokenized.tokens,
         )
 
         # Test 3:
         # assert truncation is boolean
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             self.tokenizer.apply_chat_template(
                 conversation, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
             )
@@ -1130,7 +1021,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         ]
 
         text_outputs = self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=False)
-        token_outputs = self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True).input_ids
+        token_outputs = self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True)
 
         self.assertEqual(len(text_outputs), len(token_outputs))
         self.assertEqual(len(text_outputs), len(expected_tokenized))
@@ -1140,11 +1031,11 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         with self.assertRaises(
             ValueError,
-            msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_apply_chat_template`.",
+            msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.batch_apply_chat_template`.",
         ):
             self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
-    def test_batch_apply_chat_template_images(self):
+    def test_batch_apply_images(self):
         conversations = [
             [
                 {"role": "system", "content": "You are a helpful assistant."},
@@ -1202,7 +1093,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             ChatCompletionRequest.from_openai(ref_conversation)
         )
 
-        output = self.tokenizer.apply_chat_template(conversations, tokenize=True).input_ids
+        output = self.tokenizer.apply_chat_template(conversations, tokenize=True)
         self.assertEqual(output, [expected_tokenized.tokens] * 3)
 
         output = self.tokenizer.apply_chat_template(conversations, tokenize=True, return_dict=True)
@@ -1216,8 +1107,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         )
         self.assertEqual(output["input_ids"].tolist(), [expected_tokenized.tokens] * 3)
         self.assertEqual(output["input_ids"].shape[0], len(expected_tokenized.images) * 3)
-        expected_images_pt_tensor = torch.from_numpy(np.stack([expected_tokenized.images] * 3))
-        self.assertTrue(torch.allclose(output["pixel_values"], expected_images_pt_tensor))
+        self.assertTrue(torch.allclose(output["pixel_values"], torch.tensor([expected_tokenized.images] * 3)))
 
         output = self.tokenizer.apply_chat_template(
             conversations, tokenize=True, return_dict=True, return_tensors="np"
@@ -1248,9 +1138,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             for conversation in conversations
         ]
 
-        token_outputs = self.tokenizer.apply_chat_template(
-            conversations, tokenize=True, continue_final_message=True
-        ).input_ids
+        token_outputs = self.tokenizer.apply_chat_template(conversations, tokenize=True, continue_final_message=True)
 
         for output, expected in zip(token_outputs, expected_tokenized):
             self.assertEqual(output, expected.tokens)
@@ -1278,54 +1166,6 @@ class TestMistralCommonBackend(unittest.TestCase):
                 continue_final_message=True,
             )
 
-    def test_batch_apply_chat_template_with_add_generation_prompt(self):
-        conversations = [
-            [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Hi!"},
-            ],
-            [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Hi!"},
-            ],
-        ]
-
-        # Test 1:
-        # with add_generation_prompt
-        for add_generation_prompt in [False, True]:
-            expected_tokenized = [
-                self.ref_tokenizer.encode_chat_completion(ChatCompletionRequest.from_openai(conversation))
-                for conversation in conversations
-            ]
-            token_outputs = self.tokenizer.apply_chat_template(
-                conversations, tokenize=True, add_generation_prompt=add_generation_prompt
-            ).input_ids
-            for output, expected in zip(token_outputs, expected_tokenized):
-                self.assertEqual(output, expected.tokens)
-
-        # Test 2:
-        # with continue_final_message
-        with self.assertRaises(ValueError):
-            self.tokenizer.apply_chat_template(
-                conversations, tokenize=True, add_generation_prompt=True, continue_final_message=True
-            )
-
-        # Test 3:
-        # with last message with assistant role
-        conversations = [
-            [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Hi!"},
-                {"role": "asistant", "content": "Hey!"},
-            ],
-            [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Hi!"},
-            ],
-        ]
-        with self.assertRaises(ValueError):
-            self.tokenizer.apply_chat_template(conversations, tokenize=True, add_generation_prompt=True)
-
     def test_batch_apply_chat_template_with_truncation(
         self,
     ):
@@ -1333,7 +1173,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         # with truncation
         token_outputs = self.tokenizer.apply_chat_template(
             self.fixture_conversations, tokenize=True, truncation=True, max_length=20
-        ).input_ids
+        )
 
         for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
             self.assertEqual(output, expected.tokens[:20])
@@ -1342,14 +1182,14 @@ class TestMistralCommonBackend(unittest.TestCase):
         # without truncation
         token_outputs = self.tokenizer.apply_chat_template(
             self.fixture_conversations, tokenize=True, truncation=False, max_length=20
-        ).input_ids
+        )
         self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
         for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
             self.assertEqual(output, expected.tokens)
 
         # Test 3:
         # assert truncation is boolean
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             self.tokenizer.apply_chat_template(
                 self.fixture_conversations, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
             )
@@ -1360,9 +1200,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         for padding in [True, "max_length", PaddingStrategy.LONGEST, PaddingStrategy.MAX_LENGTH]:
             if padding == PaddingStrategy.MAX_LENGTH:
                 # No padding if no max length is provided
-                token_outputs = self.tokenizer.apply_chat_template(
-                    self.fixture_conversations, padding=padding, return_dict=False
-                )
+                token_outputs = self.tokenizer.apply_chat_template(self.fixture_conversations, padding=padding)
                 self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
                 for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
                     self.assertEqual(output, expected.tokens)
@@ -1370,7 +1208,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             max_length = 20 if padding == PaddingStrategy.MAX_LENGTH else None
 
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, padding=padding, max_length=max_length, return_dict=False
+                self.fixture_conversations, tokenize=True, padding=padding, max_length=max_length
             )
 
             if padding != PaddingStrategy.MAX_LENGTH:
@@ -1394,7 +1232,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         for padding in [False, "do_not_pad", PaddingStrategy.DO_NOT_PAD]:
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations, tokenize=True, padding=padding, return_dict=False
+                self.fixture_conversations, tokenize=True, padding=padding
             )
             self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
             for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
@@ -1406,12 +1244,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         max_length = 20
         for padding in [True, "max_length", PaddingStrategy.LONGEST, PaddingStrategy.MAX_LENGTH]:
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations,
-                tokenize=True,
-                truncation=True,
-                padding=padding,
-                max_length=max_length,
-                return_dict=False,
+                self.fixture_conversations, tokenize=True, truncation=True, padding=padding, max_length=max_length
             )
             self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
             for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
@@ -1420,12 +1253,7 @@ class TestMistralCommonBackend(unittest.TestCase):
                 )
         for padding in [False, "do_not_pad", PaddingStrategy.DO_NOT_PAD]:
             token_outputs = self.tokenizer.apply_chat_template(
-                self.fixture_conversations,
-                tokenize=True,
-                truncation=True,
-                padding=padding,
-                max_length=max_length,
-                return_dict=False,
+                self.fixture_conversations, tokenize=True, truncation=True, padding=padding, max_length=max_length
             )
             self.assertEqual(len(token_outputs), len(self.tokenized_fixture_conversations))
             for output, expected in zip(token_outputs, self.tokenized_fixture_conversations):
@@ -1435,7 +1263,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         # Test 1:
         # with tokenize
         token_outputs = self.tokenizer.apply_chat_template(
-            self.fixture_conversations, tokenize=True, return_tensors="pt", padding=True, return_dict=False
+            self.fixture_conversations, tokenize=True, return_tensors="pt", padding=True
         )
         self.assertIsInstance(token_outputs, torch.Tensor)
         self.assertEqual(
@@ -1446,7 +1274,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         # Test 2:
         # without tokenize, should ignore return_tensors
         token_outputs = self.tokenizer.apply_chat_template(
-            self.fixture_conversations, tokenize=False, return_tensors="pt", padding=True, return_dict=False
+            self.fixture_conversations, tokenize=False, return_tensors="pt", padding=True
         )
         self.assertEqual(token_outputs, [t.text for t in self.tokenized_fixture_conversations])
 
@@ -1510,23 +1338,23 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(tokens["special_tokens_mask"], [0] * len(expected_tokens))
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [wrong_kwarg] are not supported by `MistralCommonBackend.__call__`."
+            ValueError, msg="Kwargs [wrong_kwarg] are not supported by `MistralCommonTokenizer.__call__`."
         ):
             self.tokenizer(text, wrong_kwarg=True)
 
         with self.assertRaises(
             ValueError,
-            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`.",
+            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`.",
         ):
             self.tokenizer(text, text_pair="Hello world!")
         with self.assertRaises(
             ValueError,
-            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`.",
+            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`.",
         ):
             self.tokenizer(text, text_target="Hello world!")
         with self.assertRaises(
             ValueError,
-            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`.",
+            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`.",
         ):
             self.tokenizer(text, text_pair_target="Hello world!")
 
@@ -1577,7 +1405,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         for truncation in ["only_first", TruncationStrategy.ONLY_FIRST, "only_second", TruncationStrategy.ONLY_SECOND]:
             with self.assertRaises(
                 ValueError,
-                msg="Truncation strategy `only_first` and `only_second` are not supported by `MistralCommonBackend`.",
+                msg="Truncation strategy `only_first` and `only_second` are not supported by `MistralCommonTokenizer`.",
             ):
                 self.tokenizer(text, truncation=truncation)
 
@@ -1943,16 +1771,3 @@ class TestMistralCommonBackend(unittest.TestCase):
                         for i, ids in enumerate(expected_tokens)
                     ],
                 )
-
-    def test_get_vocab(self):
-        vocab = self.tokenizer.get_vocab()
-        # loss of some tokens due to conversion
-        self.assertNotEqual(len(vocab), len(self.tokenizer))
-        for token, id_token in vocab.items():
-            # Issue during conversion
-            if id_token == 0 and token != "<unk>":
-                continue
-            self.assertEqual(self.tokenizer.convert_tokens_to_ids(token), id_token)
-            self.assertEqual(
-                self.ref_tokenizer.decode([id_token], special_token_policy=SpecialTokenPolicy.KEEP), token
-            )

@@ -22,7 +22,6 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
-    BitsAndBytesConfig,
     LlavaNextConfig,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
@@ -191,14 +190,9 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {
-            "image-text-to-text": LlavaNextForConditionalGeneration,
-            "any-to-any": LlavaNextForConditionalGeneration,
-        }
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-text-to-text": LlavaNextForConditionalGeneration} if is_torch_available() else {}
+    test_pruning = False
+    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -220,7 +214,6 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            model.eval()
             curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
@@ -336,7 +329,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         model = LlavaNextForConditionalGeneration.from_pretrained(
             "llava-hf/llava-v1.6-mistral-7b-hf",
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            load_in_4bit=True,
         )
 
         inputs = self.processor(images=self.image, text=self.prompt, return_tensors="pt").to(torch_device)
@@ -379,7 +372,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = LlavaNextForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            "llava-hf/llava-v1.6-mistral-7b-hf", load_in_4bit=True
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         cats_image = Image.open(requests.get(url, stream=True).raw)
@@ -406,7 +399,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaNextForConditionalGeneration.from_pretrained(
             "llava-hf/llava-v1.6-mistral-7b-hf",
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            load_in_4bit=True,
         )
 
         prompt_with_unk = "[INST] <image>\nWhat is shown in this <unk> image? [/INST]"
@@ -431,7 +424,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = LlavaNextForConditionalGeneration.from_pretrained(
             "llava-hf/llava-v1.6-mistral-7b-hf",
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            load_in_4bit=True,
         )
 
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -471,7 +464,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_matches_single(self):
         model = LlavaNextForConditionalGeneration.from_pretrained(
             "llava-hf/llava-v1.6-mistral-7b-hf",
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            load_in_4bit=True,
         )
 
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -500,7 +493,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_full_vision_state_selection(self):
         model = LlavaNextForConditionalGeneration.from_pretrained(
             "llava-hf/llava-v1.6-mistral-7b-hf",
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            load_in_4bit=True,
         )
         # test that changing `strategy` won't error out
         model.vision_feature_select_strategy = "full"

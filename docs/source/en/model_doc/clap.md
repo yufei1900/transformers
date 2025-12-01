@@ -63,6 +63,7 @@ print(f"Text embeddings: {text_features}")
 ## ClapConfig
 
 [[autodoc]] ClapConfig
+    - from_text_audio_configs
 
 ## ClapTextConfig
 

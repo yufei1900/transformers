@@ -24,7 +24,6 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
@@ -205,7 +204,6 @@ class DeepseekVLHybridAligner(nn.Module):
 class DeepseekVLHybridPreTrainedModel(PreTrainedModel):
     config: DeepseekVLHybridConfig
     base_model_prefix = "model"
-    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
@@ -213,23 +211,23 @@ class DeepseekVLHybridPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
+    _supports_param_buffer_assignment = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.text_config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.text_config.initializer_range)
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, nn.Conv2d):
-            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, DeepseekVLHybridLayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, DeepseekVLHybridModel):
-            init.zeros_(module.high_res_vision_alpha)
+            module.high_res_vision_alpha.data.zero_()
 
 
 DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
@@ -389,8 +387,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
 
 
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    output_modalities = ("text",)
+    _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
     _can_compile_fullgraph = True
 
     def __init__(self, config: DeepseekVLHybridConfig):
@@ -407,6 +404,9 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
 
     def set_input_embeddings(self, value):
         self.model.language_model.set_input_embeddings(value)
+
+    def prepare_embeddings_for_image_generation(self) -> torch.Tensor:
+        raise AttributeError("Not needed for DeepseekVLHybrid")
 
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)

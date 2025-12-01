@@ -16,15 +16,12 @@
 
 import math
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ... import initialization as init
-from ...audio_utils import conv1d_output_length
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from ..auto import AutoModel
@@ -328,40 +325,38 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     config_class = XcodecConfig
     base_model_prefix = "xcodec"
     main_input_name = "input_values"
-    input_modalities = "audio"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            init.kaiming_normal_(module.weight)
+            nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                init.uniform_(module.bias, a=-k, b=k)
+                nn.init.uniform_(module.bias, a=-k, b=k)
         elif module.__class__.__name__ == "Snake1d":
-            init.ones_(module.alpha)
+            module.alpha.data.fill_(1.0)
         elif isinstance(module, nn.ConvTranspose1d):
             module.reset_parameters()
         elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=0.02)
+            module.weight.data.normal_(mean=0.0, std=0.02)
         elif isinstance(module, XcodecModel):
             # The conv1d are not handled correctly, as `self.acoustic_encoder/decoder` are initialized from a PreTrainedModel,
             # but then only the submodules are used (which are not PreTrainedModels...) -> here we reinit them as in DacModel
             for submodule in module.acoustic_encoder.modules():
                 if isinstance(submodule, nn.Conv1d):
-                    init.trunc_normal_(submodule.weight, std=0.02)
-                    init.constant_(submodule.bias, 0)
+                    nn.init.trunc_normal_(submodule.weight, std=0.02)
+                    nn.init.constant_(submodule.bias, 0)
             for submodule in module.acoustic_decoder.modules():
                 if isinstance(submodule, nn.Conv1d):
-                    init.trunc_normal_(submodule.weight, std=0.02)
-                    init.constant_(submodule.bias, 0)
+                    nn.init.trunc_normal_(submodule.weight, std=0.02)
+                    nn.init.constant_(submodule.bias, 0)
 
     def apply_weight_norm(self):
         """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
@@ -397,40 +392,6 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
                     pass
                 if hasattr(m, "parametrizations") and "weight" in m.parametrizations:
                     torch.nn.utils.parametrize.remove_parametrizations(m, "weight", leave_parametrized=True)
-
-    @lru_cache
-    def _get_conv1d_layers(self, module):
-        """
-        Recursively iterate to fetch all Conv1d layers.
-        """
-
-        def get_conv1d_layers_recursive(module: nn.Module):
-            params_list = []
-
-            if isinstance(module, nn.Conv1d):
-                params_list.append(module)
-
-            # Recursively check all child modules
-            for child in module.children():
-                params_list.extend(get_conv1d_layers_recursive(child))
-
-            return params_list
-
-        return tuple(get_conv1d_layers_recursive(module))
-
-    def _get_conv1d_output_lengths(self, input_length, module=None):
-        """
-        For a given module, compute the output length that would be obtained after all Conv1d layers.
-        """
-        if module is None:
-            module = self
-
-        conv1d_layers = self._get_conv1d_layers(module)
-
-        for layer in conv1d_layers:
-            input_length = conv1d_output_length(layer, input_length)
-
-        return input_length
 
 
 @auto_docstring(custom_intro="""The Xcodec neural audio codec model.""")
@@ -512,13 +473,11 @@ class XcodecModel(XcodecPreTrainedModel):
 
         e_semantic_input = self._extract_semantic_features(input_values).detach()
         e_semantic = self.encoder_semantic(e_semantic_input.transpose(1, 2))
+        e_acoustic = self.acoustic_encoder(input_values)
 
-        # orignal codebase infer to get the output length, but we can directly infer it
-        # from the model and know wether we should pad
-        if self._get_conv1d_output_lengths(input_values.shape[2], self.acoustic_encoder) != e_semantic.shape[2]:
-            e_acoustic = self.acoustic_encoder(F.pad(input_values, (self.pad, self.pad)))
-        else:
-            e_acoustic = self.acoustic_encoder(input_values)
+        if e_acoustic.shape[2] != e_semantic.shape[2]:
+            # make sure they line up if frames don't match
+            e_acoustic = self.acoustic_encoder(F.pad(input_values[:, 0, :], (self.pad, self.pad)).unsqueeze(1))
 
         embeddings = torch.cat([e_acoustic, e_semantic], dim=1)
         embeddings = self.fc(embeddings.transpose(1, 2)).transpose(1, 2)

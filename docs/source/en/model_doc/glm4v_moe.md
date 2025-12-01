@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
 
-# Glm4vMoeMoe
+# Glm4vMoe
 
 ## Overview
 
@@ -48,19 +48,9 @@ The model also introduces a **Thinking Mode** switch, allowing users to balance 
 
 [[autodoc]] Glm4vMoeConfig
 
-
-## Glm4vMoeVisionConfig
-
-[[autodoc]] Glm4vMoeVisionConfig
-
 ## Glm4vMoeTextConfig
 
 [[autodoc]] Glm4vMoeTextConfig
-
-## Glm4vMoeVisionModel
-
-[[autodoc]] Glm4vMoeVisionModel
-    - forward
 
 ## Glm4vMoeTextModel
 

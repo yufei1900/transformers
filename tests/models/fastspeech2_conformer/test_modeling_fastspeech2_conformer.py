@@ -125,7 +125,9 @@ class FastSpeech2ConformerModelTester:
 @require_torch
 class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
-
+    test_pruning = False
+    test_headmasking = False
+    test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
 
@@ -200,7 +202,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = FastSpeech2ConformerModel.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], set())
+        self.assertEqual(info["missing_keys"], [])
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -544,7 +546,9 @@ class FastSpeech2ConformerWithHifiGanTester:
 @require_torch
 class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
-
+    test_pruning = False
+    test_headmasking = False
+    test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
 
@@ -618,7 +622,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = FastSpeech2ConformerWithHifiGan.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], set())
+        self.assertEqual(info["missing_keys"], [])
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

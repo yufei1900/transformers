@@ -42,6 +42,7 @@ class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": False,
         },
         "image_kwargs": {},
+        "videos_kwargs": {},
     }
 
 
@@ -73,6 +74,11 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
     """
+
+    attributes = ["image_processor", "tokenizer", "video_processor"]
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
+    video_processor_class = "AutoVideoProcessor"
 
     def __init__(
         self,
@@ -108,6 +114,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio=None,
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ) -> BatchFeature:

@@ -15,14 +15,12 @@
 """PyTorch Parakeet model."""
 
 import math
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
@@ -33,16 +31,6 @@ from ...utils.generic import check_model_inputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
-    """
-)
-class ParakeetEncoderModelOutput(BaseModelOutput):
-    attention_mask: Optional[torch.Tensor] = None
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
@@ -315,7 +303,6 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     config: ParakeetCTCConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
-    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ParakeetEncoderBlock"]
     _supports_flat_attention_mask = True
@@ -332,20 +319,19 @@ class ParakeetPreTrainedModel(PreTrainedModel):
         "attentions": ParakeetEncoderAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range
         else:
-            # 0.02 is the standard default value across the library
+            # 0.02 is the standard default value accross the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, ParakeetEncoderAttention):
             # Initialize positional bias parameters
-            init.normal_(module.bias_u, mean=0.0, std=std)
-            init.normal_(module.bias_v, mean=0.0, std=std)
+            module.bias_u.data.normal_(mean=0.0, std=std)
+            module.bias_v.data.normal_(mean=0.0, std=std)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = self.config.encoder_config if isinstance(self.config, ParakeetCTCConfig) else self.config
@@ -411,13 +397,9 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         self,
         input_features: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attention_mask: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        output_attention_mask (`bool`, *optional*):
-            Whether to return the output attention mask.
-
         Example:
 
         ```python
@@ -448,8 +430,8 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         )
 
         if attention_mask is not None:
-            output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
-            attention_mask = output_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
+            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
             attention_mask = attention_mask & attention_mask.transpose(1, 2)
             attention_mask = attention_mask.unsqueeze(1)
 
@@ -469,9 +451,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
                     **kwargs,
                 )
 
-        return ParakeetEncoderModelOutput(
-            last_hidden_state=hidden_states, attention_mask=output_mask.int() if output_attention_mask else None
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @dataclass

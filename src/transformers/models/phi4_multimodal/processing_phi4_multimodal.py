@@ -58,6 +58,9 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             The fake audio token pattern.
     """
 
+    attributes = ["image_processor", "audio_processor", "tokenizer"]
+    tokenizer_class = "GPT2TokenizerFast"
+    image_processor_class = "Phi4MultimodalImageProcessorFast"
     audio_processor_class = "Phi4MultimodalFeatureExtractor"
 
     def __init__(

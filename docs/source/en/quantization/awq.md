@@ -55,11 +55,10 @@ Load the AWQ-quantized model with [`~PreTrainedModel.from_pretrained`]. This aut
 If the model is loaded on the CPU, use the `device_map` parameter to move it to an accelerator.
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 import torch
 
-device = Accelerator().device
+device = f"{infer_device()}:0"
 
 model = AutoModelForCausalLM.from_pretrained(
   "TheBloke/zephyr-7B-alpha-AWQ",

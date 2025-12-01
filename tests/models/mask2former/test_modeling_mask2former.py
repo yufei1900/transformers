@@ -203,7 +203,8 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     pipeline_model_mapping = {"image-feature-extraction": Mask2FormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
-
+    test_pruning = False
+    test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = True
 

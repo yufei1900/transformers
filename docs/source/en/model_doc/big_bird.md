@@ -80,7 +80,7 @@ print(f"The predicted token is: {predicted_token}")
 <hfoption id="transformers CLI">
 
 ```bash
-!echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model google/bigbird-roberta-base --device 0
+!echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers-cli run --task fill-mask --model google/bigbird-roberta-base --device 0
 ```
 
 </hfoption>
@@ -104,7 +104,9 @@ print(f"The predicted token is: {predicted_token}")
 ## BigBirdTokenizer
 
 [[autodoc]] BigBirdTokenizer
+    - build_inputs_with_special_tokens
     - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## BigBirdTokenizerFast

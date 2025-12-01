@@ -14,8 +14,7 @@
 
 import argparse
 import textwrap
-from collections.abc import Callable
-from typing import Any
+from typing import Any, Callable
 
 from transformers import is_torch_available, is_torch_xpu_available
 from transformers.testing_utils import (

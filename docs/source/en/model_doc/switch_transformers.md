@@ -105,6 +105,7 @@ print(tokenizer.decode(outputs[0]))
 ## SwitchTransformersTop1Router
 
 [[autodoc]] SwitchTransformersTop1Router
+    - _compute_router_probabilities
     - forward
 
 ## SwitchTransformersSparseMLP

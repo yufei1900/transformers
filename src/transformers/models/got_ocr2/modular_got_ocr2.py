@@ -19,9 +19,8 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -46,15 +45,15 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
-class GotOcr2VisionConfig(PreTrainedConfig):
+class GotOcr2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GotOcr2VisionModel`]. It is used to instantiate a GOT_OCR2
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of the SAM ViT-h
     [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -137,7 +136,7 @@ class GotOcr2VisionConfig(PreTrainedConfig):
         self.mlp_dim = mlp_dim
 
 
-class GotOcr2Config(PreTrainedConfig):
+class GotOcr2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GotOcr2ForConditionalGeneration`]. It is used to instantiate a
     GotOcr2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -145,8 +144,8 @@ class GotOcr2Config(PreTrainedConfig):
 
     e.g [stepfun-ai/GOT-OCR-2.0-hf](https://huggingface.co/stepfun-ai/GOT-OCR-2.0-hf)
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -182,11 +181,11 @@ class GotOcr2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vision_config: Optional[dict] = None,
-        text_config: Optional[dict] = None,
-        image_token_index: Optional[int] = 151859,
-        image_seq_length: Optional[int] = 576,
-        pad_token_id: Optional[int] = -1,
+        vision_config=None,
+        text_config=None,
+        image_token_index=151859,
+        image_seq_length=576,
+        pad_token_id=-1,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -218,7 +217,7 @@ class GotOcr2Config(PreTrainedConfig):
                 use_cache=True,
                 tie_word_embeddings=True,
                 rope_theta=1000000.0,
-                rope_parameters=None,
+                rope_scaling=None,
                 use_sliding_window=False,
                 sliding_window=4096,
                 max_window_layers=21,
@@ -249,11 +248,11 @@ class GotOcr2VisionLayer(SamVisionLayer):
 
 
 class GotOcr2PreTrainedModel(SamPreTrainedModel):
-    input_modalities = ("image", "text")
+    pass
 
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
-    input_modalities = ("image",)
+    pass
 
 
 class GotOcr2MultiModalProjector(nn.Module):
@@ -290,16 +289,15 @@ class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                init.zeros_(module.rel_pos_h)
-                init.zeros_(module.rel_pos_w)
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                init.zeros_(module.pos_embed)
+                module.pos_embed.data.zero_()
 
 
 class GotOcr2Model(LlavaModel):

@@ -39,14 +39,13 @@ The example below demonstrates how to generate text based on an image with the [
 
 ```py
 import torch
-from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
-from accelerate import Accelerator
+from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor, infer_device
 from transformers.image_utils import load_image
 
 
 # Prepare processor and model
 model_id = "openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det"
-device = Accelerator().device
+device = infer_device()
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 

@@ -23,7 +23,6 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1435,46 +1434,45 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
     config: MaskFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
         if isinstance(module, MaskFormerTransformerModule):
             if module.input_projection is not None:
-                init.xavier_uniform_(module.input_projection.weight, gain=xavier_std)
-                init.constant_(module.input_projection.bias, 0)
+                nn.init.xavier_uniform_(module.input_projection.weight, gain=xavier_std)
+                nn.init.constant_(module.input_projection.bias, 0)
         # FPN
         elif isinstance(module, MaskFormerFPNModel):
-            init.xavier_uniform_(module.stem.get_submodule("0").weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.stem.get_submodule("0").weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNLayer):
-            init.xavier_uniform_(module.proj[0].weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.proj[0].weight, gain=xavier_std)
 
         elif isinstance(module, MaskFormerFPNConvLayer):
-            init.xavier_uniform_(module.get_submodule("0").weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.get_submodule("0").weight, gain=xavier_std)
         # The MLP head
         elif isinstance(module, MaskformerMLPPredictionHead):
             # I was not able to find the correct initializer in the original implementation
             # we'll use xavier
             for submodule in module.modules():
                 if isinstance(submodule, nn.Linear):
-                    init.xavier_uniform_(submodule.weight, gain=xavier_std)
-                    init.constant_(submodule.bias, 0)
+                    nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
+                    nn.init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         # copied from DETR
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 @auto_docstring

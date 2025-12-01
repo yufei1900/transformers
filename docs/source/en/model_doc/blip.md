@@ -87,6 +87,7 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 ## BlipConfig
 
 [[autodoc]] BlipConfig
+    - from_text_vision_configs
 
 ## BlipTextConfig
 

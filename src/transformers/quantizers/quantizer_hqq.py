@@ -65,7 +65,12 @@ class HqqHfQuantizer(HfQuantizer):
         # Keys that are serialized specifically by hqq
         self.hqq_keys = HQQLinear(None, None).state_dict_keys() - {"bias"}
 
-    def validate_environment(self, *args, **kwargs):
+        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
+            raise ValueError(
+                "Converting weights from tf/flax weights is currently not supported, please make"
+                " sure the weights are in PyTorch format."
+            )
+
         if self.dtype is None:
             if "dtype" in kwargs:
                 self.dtype = kwargs["dtype"]

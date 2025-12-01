@@ -94,6 +94,11 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] ViTConfig
 
+## ViTFeatureExtractor
+
+[[autodoc]] ViTFeatureExtractor
+    - __call__
+
 ## ViTImageProcessor
 
 [[autodoc]] ViTImageProcessor

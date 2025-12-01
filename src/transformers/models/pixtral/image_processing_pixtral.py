@@ -38,7 +38,6 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -48,15 +47,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
-
-
-class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    patch_size (`Union[dict[str, int], int]` *optional*, defaults to `{"height": 16, "width": 16}`):
-        Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
-    """
-
-    patch_size: Union[dict[str, int], int]
 
 
 # Adapted from function in image_transforms.py to ensure any transparent pixels are converted to white.
@@ -181,7 +171,6 @@ class PixtralImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "image_sizes"]
-    valid_kwargs = PixtralImageProcessorKwargs
 
     def __init__(
         self,
@@ -377,8 +366,10 @@ class PixtralImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -410,7 +401,10 @@ class PixtralImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images[0]):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

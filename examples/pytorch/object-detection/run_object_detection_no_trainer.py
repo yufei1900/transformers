@@ -14,7 +14,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "transformers==4.57.3",
 #     "albumentations >= 1.4.16",
 #     "timm",
 #     "datasets>=4.0",
@@ -63,7 +63,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.57.0.dev0")
+check_min_version("4.57.0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)
@@ -278,6 +278,11 @@ def parse_args():
         "--cache_dir",
         type=str,
         help="Path to a folder in which the model and dataset will be cached.",
+    )
+    parser.add_argument(
+        "--use_auth_token",
+        action="store_true",
+        help="Whether to use an authentication token to access the model repository.",
     )
     parser.add_argument(
         "--per_device_train_batch_size",

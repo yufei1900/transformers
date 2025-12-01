@@ -13,28 +13,30 @@
 # limitations under the License.
 
 
-from transformers import AutoTokenizer
-from transformers.models.distilbert.tokenization_distilbert import DistilBertTokenizer
-from transformers.testing_utils import require_tokenizers
+from transformers import DistilBertTokenizer, DistilBertTokenizerFast
+from transformers.testing_utils import require_tokenizers, slow
 
 from ..bert import test_tokenization_bert
 
 
-# TODO: Ita remove this test file?
 @require_tokenizers
 class DistilBertTokenizationTest(test_tokenization_bert.BertTokenizationTest):
     tokenizer_class = DistilBertTokenizer
-    rust_tokenizer_class = DistilBertTokenizer
-    test_rust_tokenizer = False
+    rust_tokenizer_class = DistilBertTokenizerFast
+    test_rust_tokenizer = True
     from_pretrained_id = "distilbert/distilbert-base-uncased"
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    @slow
+    def test_sequence_builders(self):
+        tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
-        from_pretrained_id = "distilbert/distilbert-base-uncased"
+        text = tokenizer.encode("sequence builders", add_special_tokens=False)
+        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
 
-        tok_auto = AutoTokenizer.from_pretrained(from_pretrained_id)
-        tok_auto.save_pretrained(cls.tmpdirname)
+        encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
+        encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
-        cls.tokenizers = [tok_auto]
+        assert encoded_sentence == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id]
+        assert encoded_pair == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id] + text_2 + [
+            tokenizer.sep_token_id
+        ]

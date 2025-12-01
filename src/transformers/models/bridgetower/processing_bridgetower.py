@@ -16,10 +16,17 @@
 Processor class for BridgeTower.
 """
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from typing import Optional
+
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+
+
+class BridgeTowerImagesKwargs(ImagesKwargs):
+    size_divisor: Optional[int]
 
 
 class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: BridgeTowerImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -54,6 +61,9 @@ class BridgeTowerProcessor(ProcessorMixin):
             An instance of ['RobertaTokenizerFast`]. The tokenizer is a required input.
     """
 
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "BridgeTowerImageProcessor"
+    tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
     valid_processor_kwargs = BridgeTowerProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):

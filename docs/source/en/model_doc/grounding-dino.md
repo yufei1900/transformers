@@ -50,11 +50,10 @@ Here's how to use the model for zero-shot object detection:
 
 >>> import torch
 >>> from PIL import Image
->>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
-from accelerate import Accelerator
+>>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection, infer_device
 
 >>> model_id = "IDEA-Research/grounding-dino-tiny"
->>> device = Accelerator().device
+>>> device = infer_device()
 
 >>> processor = AutoProcessor.from_pretrained(model_id)
 >>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)

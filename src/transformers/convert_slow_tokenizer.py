@@ -1415,7 +1415,7 @@ class MarkupLMConverter(Converter):
 class MoshiConverter(SpmConverter):
     handle_byte_fallback = True
 
-    def __init__(self, vocab_file, **kwargs):
+    def __init__(self, vocab_file, model_max_length=None, **kwargs):
         requires_backends(self, "protobuf")
 
         Converter.__init__(self, vocab_file)
@@ -1590,6 +1590,7 @@ class ParakeetConverter(SpmConverter):
         return tokenizer
 
 
+# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -1624,14 +1625,16 @@ class TikTokenConverter:
         vocab_file=None,
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
-        extra_special_tokens=None,
+        additional_special_tokens=None,
         **kwargs,
     ):
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
-        self.extra_special_tokens = (
-            extra_special_tokens.keys() if isinstance(extra_special_tokens, dict) else extra_special_tokens
+        self.additional_special_tokens = (
+            additional_special_tokens.keys()
+            if isinstance(additional_special_tokens, dict)
+            else additional_special_tokens
         )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
@@ -1683,7 +1686,7 @@ class TikTokenConverter:
         tokenizer.decoder = decoders.ByteLevel()
 
         tokenizer.add_special_tokens(
-            [AddedToken(token, normalized=False, special=True) for token in self.extra_special_tokens]
+            [AddedToken(token, normalized=False, special=True) for token in self.additional_special_tokens]
         )
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
@@ -1809,8 +1812,10 @@ SLOW_TO_FAST_CONVERTERS = {
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
     "Qwen2Tokenizer": Qwen2Converter,
+    "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,
+    "RetriBertTokenizer": BertConverter,
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
@@ -1858,7 +1863,7 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
             logger.info("Converting from Tiktoken")
             return TikTokenConverter(
                 vocab_file=transformer_tokenizer.vocab_file,
-                extra_special_tokens=transformer_tokenizer.extra_special_tokens,
+                additional_special_tokens=transformer_tokenizer.additional_special_tokens,
             ).converted()
         except Exception:
             raise ValueError(

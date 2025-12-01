@@ -65,6 +65,9 @@ class ColQwen2Processor(ColPaliProcessor):
         query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
+
     def __init__(
         self,
         image_processor=None,
@@ -90,6 +93,8 @@ class ColQwen2Processor(ColPaliProcessor):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -97,9 +102,9 @@ class ColQwen2Processor(ColPaliProcessor):
         wrapper around the Qwen2VLProcessor's [`~Qwen2VLProcessor.__call__`] method adapted for the ColQwen2 model. It cannot process
         both text and images at the same time.
 
-        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's
+        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's
         [`~Qwen2TokenizerFast.__call__`].
-        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's
+        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's
         [`~Qwen2VLImageProcessor.__call__`].
         Please refer to the doctsring of the above two methods for more information.
 
@@ -115,8 +120,10 @@ class ColQwen2Processor(ColPaliProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -304,6 +311,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         del self._tied_weights_keys
+        self._tied_weights_keys = [f"vlm.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
     @can_return_tuple
     @auto_docstring
@@ -352,10 +360,11 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
-            inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
+            inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
 
             if pixel_values is not None:
-                image_embeds = self.vlm.model.visual(pixel_values, grid_thw=image_grid_thw)
+                pixel_values = pixel_values.type(self.vlm.visual.get_dtype())
+                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 )

@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import shutil
+import tempfile
 import unittest
 
 import numpy as np
@@ -20,22 +22,33 @@ from transformers.testing_utils import (
     require_torchvision,
     require_vision,
 )
-from transformers.utils import is_torch_available, is_vision_available
-
-from ...test_processing_common import ProcessorTesterMixin
+from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
 
 if is_vision_available():
-    from transformers import Sam2Processor
+    from transformers import AutoProcessor, Sam2ImageProcessorFast, Sam2Processor
 
 if is_torch_available():
     import torch
 
+if is_tf_available():
+    pass
+
 
 @require_vision
 @require_torchvision
-class Sam2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = Sam2Processor
+class Sam2ProcessorTest(unittest.TestCase):
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+        image_processor = Sam2ImageProcessorFast()
+        processor = Sam2Processor(image_processor)
+        processor.save_pretrained(self.tmpdirname)
+
+    def get_image_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
 
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
@@ -53,9 +66,23 @@ class Sam2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # mask_inputs = [Image.fromarray(x) for x in mask_inputs]
         return mask_inputs
 
+    def test_save_load_pretrained_additional_features(self):
+        image_processor = self.get_image_processor()
+
+        processor = Sam2Processor(image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
+
+        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+
+        processor = Sam2Processor.from_pretrained(self.tmpdirname, do_normalize=False, padding_value=1.0)
+
+        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.image_processor, Sam2ImageProcessorFast)
+
     def test_image_processor_no_masks(self):
-        image_processor = self.get_component("image_processor")
-        processor = self.get_processor()
+        image_processor = self.get_image_processor()
+
+        processor = Sam2Processor(image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
 
@@ -78,9 +105,9 @@ class Sam2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             np.testing.assert_array_equal(original_size, np.array([30, 400]))
 
     def test_image_processor_with_masks(self):
-        image_processor = self.get_component("image_processor")
+        image_processor = self.get_image_processor()
 
-        processor = self.get_processor()
+        processor = Sam2Processor(image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
         mask_input = self.prepare_mask_inputs()
@@ -96,7 +123,9 @@ class Sam2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_post_process_masks(self):
-        processor = self.get_processor()
+        image_processor = self.get_image_processor()
+
+        processor = Sam2Processor(image_processor=image_processor)
         dummy_masks = [torch.ones((1, 3, 5, 5))]
 
         original_sizes = [[1764, 2646]]
@@ -114,5 +143,5 @@ class Sam2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         dummy_masks = [[1, 0], [0, 1]]
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes))

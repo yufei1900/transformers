@@ -13,10 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.s
 
-from typing import Optional
-
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -24,7 +21,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class KyutaiSpeechToTextConfig(PreTrainedConfig):
+class KyutaiSpeechToTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`KyutaiSpeechToTextForConditionalGeneration`].
     It is used to instantiate a Kyutai Speech-to-Text model according to the specified arguments, defining the model
@@ -33,8 +30,8 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
 
     e.g. [kyutai/stt-2.6b-en-trfs](https://huggingface.co/kyutai/stt-2.6b-en-trfs)
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         codebook_vocab_size (`int`, *optional*, defaults to 2049):
@@ -59,10 +56,8 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 750):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+        rope_theta (`float`, *optional*, defaults to 100000.0):
+            The base period of the RoPE embeddings.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
@@ -92,13 +87,13 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 48000):
             Beginning of stream token id for text tokens.
-        codec_config (`PreTrainedConfig`, *optional*):
+        codec_config (`PretrainedConfig`, *optional*):
             Configuration for the codec.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
-                - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio encoder config.
-                - **depth__config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **depth__config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the depth decoder config.
 
 
@@ -122,37 +117,41 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        codebook_vocab_size: Optional[int] = 2049,
-        vocab_size: Optional[int] = 4001,
-        hidden_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 48,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        max_position_embeddings: Optional[int] = 750,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        hidden_act: Optional[str] = "silu",
-        head_dim: Optional[int] = None,
-        initializer_range: Optional[float] = 0.02,
-        use_cache: Optional[bool] = True,
-        sliding_window: Optional[int] = 375,
-        attention_dropout: Optional[float] = 0.0,
-        ffn_dim: Optional[int] = 11264,
-        rms_norm_eps: Optional[int] = 1e-8,
-        num_codebooks: Optional[int] = 32,
-        audio_bos_token_id: Optional[int] = 2048,
-        audio_pad_token_id: Optional[int] = 69569,
-        tie_word_embeddings: Optional[bool] = False,
-        pad_token_id: Optional[int] = 3,
-        bos_token_id: Optional[int] = 48000,
-        codec_config: Optional[dict] = None,
+        codebook_vocab_size=2049,
+        vocab_size=4001,
+        hidden_size=2048,
+        num_hidden_layers=48,
+        num_attention_heads=32,
+        num_key_value_heads=None,
+        max_position_embeddings=750,
+        rope_theta=100000.0,
+        hidden_act="silu",
+        head_dim=None,
+        initializer_range=0.02,
+        use_cache=True,
+        sliding_window=375,
+        attention_dropout=0.0,
+        ffn_dim=11264,
+        rms_norm_eps=1e-8,
+        num_codebooks=32,
+        audio_bos_token_id=2048,
+        audio_pad_token_id=69569,
+        tie_word_embeddings=False,
+        pad_token_id=3,
+        bos_token_id=48000,
+        codec_config=None,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )
+
         if codec_config is None:
             self.codec_config = AutoConfig.for_model("mimi")
             logger.info("codec_config is None, using default audio encoder config.")
         elif isinstance(codec_config, dict):
             self.codec_config = AutoConfig.for_model(**codec_config)
-        elif isinstance(codec_config, PreTrainedConfig):
+        elif isinstance(codec_config, PretrainedConfig):
             self.codec_config = codec_config
 
         self.num_codebooks = num_codebooks
@@ -180,14 +179,10 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
+        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.sliding_window = sliding_window
-        self.rope_parameters = rope_parameters
-
-        super().__init__(
-            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
 
 
 __all__ = ["KyutaiSpeechToTextConfig"]

@@ -45,6 +45,7 @@ class PixtralProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "images_kwargs": {},
         "common_kwargs": {
             "return_tensors": "pt",
         },
@@ -87,6 +88,10 @@ class PixtralProcessor(ProcessorMixin):
             Special token used to denote the end of an image input.
     """
 
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
+
     def __init__(
         self,
         image_processor=None,
@@ -115,6 +120,8 @@ class PixtralProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[PixtralProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -135,8 +142,10 @@ class PixtralProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -157,8 +166,7 @@ class PixtralProcessor(ProcessorMixin):
         patch_size = self.patch_size * self.spatial_merge_size
 
         if images is not None:
-            output_kwargs["images_kwargs"]["patch_size"] = patch_size
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images, patch_size=patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 

@@ -22,6 +22,7 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -41,7 +42,22 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from .image_processing_nougat import NougatImageProcessorKwargs
+
+
+class NougatFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Args:
+    do_crop_margin (`bool`, *optional*, defaults to `True`):
+            Whether to crop the image margins.
+    do_thumbnail (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image using thumbnail method.
+    do_align_long_axis (`bool`, *optional*, defaults to `False`):
+            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+    """
+
+    do_crop_margin: Optional[bool]
+    do_thumbnail: Optional[bool]
+    do_align_long_axis: Optional[bool]
 
 
 @auto_docstring
@@ -57,13 +73,13 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
     do_pad: bool = True
     do_rescale = True
     do_crop_margin: bool = True
-    valid_kwargs = NougatImageProcessorKwargs
+    valid_kwargs = NougatFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[NougatImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[NougatFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[NougatImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[NougatFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def python_find_non_zero(

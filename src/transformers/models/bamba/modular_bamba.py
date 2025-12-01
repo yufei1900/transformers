@@ -36,13 +36,11 @@ from transformers.models.llama.modeling_llama import (
 )
 from transformers.models.mamba2.modeling_mamba2 import (
     MambaRMSNormGated,
-    apply_mask_to_padding_states,
     pad_tensor_by_size,
     reshape_into_chunks,
     segment_sum,
 )
 
-from ... import initialization as init
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -52,6 +50,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_bamba import BambaConfig
 
@@ -203,6 +202,17 @@ class BambaAttention(LlamaAttention):
 
 class BambaRMSNormGated(MambaRMSNormGated):
     pass
+
+
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
 
 
 # Adapted from transformers.models.mamba2.modeling_mamba2.Mamba2Mixer
@@ -711,6 +721,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         else:
             raise ValueError("Invalid layer_type")
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -720,7 +731,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[BambaFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -801,13 +812,12 @@ class BambaPreTrainedModel(PreTrainedModel):
     # Note: only supports HybridMambaAttentionDynamicCache
     _is_stateful = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, BambaMixer):
-            init.ones_(module.dt_bias)
-            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
-            init.ones_(module.D)
+            module.dt_bias.data.fill_(1.0)
+            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
+            module.D.data.fill_(1.0)
 
 
 @auto_docstring
@@ -880,7 +890,9 @@ class BambaModel(BambaPreTrainedModel):
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
         mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None

@@ -14,7 +14,7 @@
 # limitations under the License.
 import math
 from functools import lru_cache
-from typing import Union
+from typing import Optional, Union
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -22,6 +22,7 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -32,7 +33,9 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import (
+    Unpack,
+)
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -169,24 +172,24 @@ def pad_along_first_dim(
     return images, pixel_mask
 
 
-class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
+class Lfm2VlFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     downsample_factor (`int`, *optional*, defaults to `2`):
         The downsampling factor for images used when resizing the image.
     """
 
-    downsample_factor: int
-    do_image_splitting: bool
-    min_tiles: int
-    max_tiles: int
-    use_thumbnail: bool
-    min_image_tokens: int
-    max_image_tokens: int
-    encoder_patch_size: int
-    tile_size: int
-    max_pixels_tolerance: float
-    do_pad: bool
-    return_row_col_info: bool
+    downsample_factor: Optional[int]
+    do_image_splitting: Optional[bool]
+    min_tiles: Optional[int]
+    max_tiles: Optional[int]
+    use_thumbnail: Optional[bool]
+    min_image_tokens: Optional[int]
+    max_image_tokens: Optional[int]
+    encoder_patch_size: Optional[int]
+    tile_size: Optional[int]
+    max_pixels_tolerance: Optional[float]
+    do_pad: Optional[bool]
+    return_row_col_info: Optional[bool]
 
 
 @auto_docstring
@@ -209,12 +212,12 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_pad = True
     return_row_col_info = False
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
-    valid_kwargs = Lfm2VlImageProcessorKwargs
+    image_mean = IMAGENET_STANDARD_STD
+    image_std = IMAGENET_STANDARD_MEAN
+    valid_kwargs = Lfm2VlFastImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
 
-    def __init__(self, **kwargs: Unpack[Lfm2VlImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Lfm2VlFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
         max_thumbnail_image_patches = self.max_image_tokens * self.downsample_factor**2
@@ -391,7 +394,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
 
         # Big image will be cropped into patches and small images are just resized
         if is_image_large and do_image_splitting:
-            images, num_cols, num_rows = self.crop_image_to_patches(
+            images, num_rows, num_cols = self.crop_image_to_patches(
                 images,
                 min_tiles=min_tiles,
                 max_tiles=max_tiles,

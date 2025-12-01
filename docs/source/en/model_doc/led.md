@@ -84,10 +84,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers">
+<hfoption id="transformers-cli">
 
 ```bash
-!echo -e "Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet. Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts." | transformers run --task summarization --model allenai/led-base-16384 --device 0
+!echo -e "Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet. Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts." | transformers-cli run --task summarization --model allenai/led-base-16384 --device 0
 ```
 
 </hfoption>
@@ -152,7 +152,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## LEDTokenizer
 
 [[autodoc]] LEDTokenizer
+    - build_inputs_with_special_tokens
     - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## LEDTokenizerFast

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch UperNet."""
+"""Testing suite for the PyTorch UperNet framework."""
 
 import unittest
 
@@ -149,8 +149,11 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     all_model_classes = (UperNetForSemanticSegmentation,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-segmentation": UperNetForSemanticSegmentation} if is_torch_available() else {}
-
+    fx_compatible = False
+    test_pruning = False
     test_resize_embeddings = False
+    test_head_masking = False
+    test_torchscript = False
     has_attentions = False
     test_torch_exportable = True
     test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"

@@ -26,6 +26,12 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] Adafactor
 
+## AdamWeightDecay (TensorFlow)
+
+[[autodoc]] AdamWeightDecay
+
+[[autodoc]] create_optimizer
+
 ## Schedules
 
 ### Learning Rate Schedules (Pytorch)
@@ -55,3 +61,13 @@ rendered properly in your Markdown viewer.
 [[autodoc]] get_polynomial_decay_schedule_with_warmup
 
 [[autodoc]] get_inverse_sqrt_schedule
+
+### Warmup (TensorFlow)
+
+[[autodoc]] WarmUp
+
+## Gradient Strategies
+
+### GradientAccumulator (TensorFlow)
+
+[[autodoc]] GradientAccumulator

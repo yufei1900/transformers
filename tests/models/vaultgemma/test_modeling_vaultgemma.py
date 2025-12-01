@@ -47,6 +47,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        VaultGemmaForCausalLM,
         VaultGemmaModel,
     )
 
@@ -58,6 +59,15 @@ class VaultGemmaModelTester(CausalLMModelTester):
 
 @require_torch
 class VaultGemmaModelTest(CausalLMModelTest, unittest.TestCase):
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": VaultGemmaModel,
+            "text-generation": VaultGemmaForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
+
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = VaultGemmaModelTester

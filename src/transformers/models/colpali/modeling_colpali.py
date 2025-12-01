@@ -22,7 +22,6 @@ from torch import nn
 
 from transformers import AutoModelForImageTextToText
 
-from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
@@ -33,13 +32,11 @@ from .configuration_colpali import ColPaliConfig
 class ColPaliPreTrainedModel(PreTrainedModel):
     config: ColPaliConfig
     base_model_prefix = "model"
-    input_modalities = ("image", "text")
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = (
             self.config.initializer_range
@@ -48,14 +45,13 @@ class ColPaliPreTrainedModel(PreTrainedModel):
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 @dataclass
@@ -116,6 +112,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
         self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
+        self._tied_weights_keys = [f"vlm.language_model.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -187,6 +184,9 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
+
+    def tie_weights(self):
+        return self.vlm.tie_weights()
 
     def resize_token_embeddings(
         self,

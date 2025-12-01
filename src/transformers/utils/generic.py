@@ -18,19 +18,27 @@ Generic utilities
 import inspect
 import json
 import os
+import tempfile
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
-from collections.abc import Callable, Iterable, MutableMapping
-from contextlib import AbstractContextManager, ExitStack
+from collections.abc import Iterable, MutableMapping
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Optional, TypedDict
+from typing import Any, Callable, Optional, TypedDict
 
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
+from .import_utils import (
+    is_flax_available,
+    is_mlx_available,
+    is_tf_available,
+    is_torch_available,
+    is_torch_fx_proxy,
+    requires,
+)
 
 
 _CAN_RECORD_REGISTRY = {}
@@ -38,20 +46,11 @@ _CAN_RECORD_REGISTRY = {}
 
 logger = logging.get_logger(__name__)
 
-_is_torch_available = False
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch
 
     from ..model_debugging_utils import model_addition_debugger_context
-
-    _is_torch_available = True
-
-
-# required for @can_return_tuple decorator to work with torchdynamo
-_is_mlx_available = False
-if is_mlx_available():
-    _is_mlx_available = True
 
 
 # vendored from distutils.util
@@ -77,6 +76,10 @@ def infer_framework_from_repr(x):
     representation = str(type(x))
     if representation.startswith("<class 'torch."):
         return "pt"
+    elif representation.startswith("<class 'tensorflow."):
+        return "tf"
+    elif representation.startswith("<class 'jax"):
+        return "jax"
     elif representation.startswith("<class 'numpy."):
         return "np"
     elif representation.startswith("<class 'mlx."):
@@ -90,6 +93,8 @@ def _get_frameworks_and_test_func(x):
     """
     framework_to_test = {
         "pt": is_torch_tensor,
+        "tf": is_tf_tensor,
+        "jax": is_jax_tensor,
         "np": is_numpy_array,
         "mlx": is_mlx_array,
     }
@@ -104,7 +109,8 @@ def _get_frameworks_and_test_func(x):
 
 def is_tensor(x):
     """
-    Tests if `x` is a `torch.Tensor`, `np.ndarray` or `mlx.array` in the order defined by `infer_framework_from_repr`
+    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray`, `np.ndarray` or `mlx.array`
+    in the order defined by `infer_framework_from_repr`
     """
     # This gives us a smart order to test the frameworks with the corresponding tests.
     framework_to_test_func = _get_frameworks_and_test_func(x)
@@ -116,42 +122,111 @@ def is_tensor(x):
     if is_torch_fx_proxy(x):
         return True
 
+    if is_flax_available():
+        from jax.core import Tracer
+
+        if isinstance(x, Tracer):
+            return True
+
     return False
+
+
+def _is_numpy(x):
+    return isinstance(x, np.ndarray)
 
 
 def is_numpy_array(x):
     """
     Tests if `x` is a numpy array or not.
     """
-    return isinstance(x, np.ndarray)
+    return _is_numpy(x)
+
+
+def _is_torch(x):
+    import torch
+
+    return isinstance(x, torch.Tensor)
 
 
 def is_torch_tensor(x):
     """
     Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
     """
-    return _is_torch_available and isinstance(x, torch.Tensor)
+    return False if not is_torch_available() else _is_torch(x)
+
+
+def _is_torch_device(x):
+    import torch
+
+    return isinstance(x, torch.device)
 
 
 def is_torch_device(x):
     """
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
-    return _is_torch_available and isinstance(x, torch.device)
+    return False if not is_torch_available() else _is_torch_device(x)
 
 
-def is_torch_dtype(x):
-    """
-    Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
-    """
-    if not _is_torch_available:
-        return False
+def _is_torch_dtype(x):
+    import torch
+
     if isinstance(x, str):
         if hasattr(torch, x):
             x = getattr(torch, x)
         else:
             return False
     return isinstance(x, torch.dtype)
+
+
+def is_torch_dtype(x):
+    """
+    Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
+    """
+    return False if not is_torch_available() else _is_torch_dtype(x)
+
+
+def _is_tensorflow(x):
+    import tensorflow as tf
+
+    return isinstance(x, tf.Tensor)
+
+
+def is_tf_tensor(x):
+    """
+    Tests if `x` is a tensorflow tensor or not. Safe to call even if tensorflow is not installed.
+    """
+    return False if not is_tf_available() else _is_tensorflow(x)
+
+
+def _is_tf_symbolic_tensor(x):
+    import tensorflow as tf
+
+    # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
+    if hasattr(tf, "is_symbolic_tensor"):
+        return tf.is_symbolic_tensor(x)
+    return isinstance(x, tf.Tensor)
+
+
+def is_tf_symbolic_tensor(x):
+    """
+    Tests if `x` is a tensorflow symbolic tensor or not (ie. not eager). Safe to call even if tensorflow is not
+    installed.
+    """
+    return False if not is_tf_available() else _is_tf_symbolic_tensor(x)
+
+
+def _is_jax(x):
+    import jax.numpy as jnp  # noqa: F811
+
+    return isinstance(x, jnp.ndarray)
+
+
+def is_jax_tensor(x):
+    """
+    Tests if `x` is a Jax tensor or not. Safe to call even if jax is not installed.
+    """
+    return False if not is_flax_available() else _is_jax(x)
 
 
 def _is_mlx(x):
@@ -164,12 +239,12 @@ def is_mlx_array(x):
     """
     Tests if `x` is a mlx array or not. Safe to call even when mlx is not installed.
     """
-    return False if not _is_mlx_available else _is_mlx(x)
+    return False if not is_mlx_available() else _is_mlx(x)
 
 
 def to_py_obj(obj):
     """
-    Convert a PyTorch tensor, Numpy array or python list to a python list.
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
     """
     if isinstance(obj, (int, float)):
         return obj
@@ -186,6 +261,8 @@ def to_py_obj(obj):
 
     framework_to_py_obj = {
         "pt": lambda obj: obj.tolist(),
+        "tf": lambda obj: obj.numpy().tolist(),
+        "jax": lambda obj: np.asarray(obj).tolist(),
         "np": lambda obj: obj.tolist(),
     }
 
@@ -204,11 +281,13 @@ def to_py_obj(obj):
 
 def to_numpy(obj):
     """
-    Convert a PyTorch tensor, Numpy array or python list to a Numpy array.
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
     """
 
     framework_to_numpy = {
         "pt": lambda obj: obj.detach().cpu().numpy(),
+        "tf": lambda obj: obj.numpy(),
+        "jax": lambda obj: np.asarray(obj),
         "np": lambda obj: obj,
     }
 
@@ -224,17 +303,6 @@ def to_numpy(obj):
             return framework_to_numpy[framework](obj)
 
     return obj
-
-
-def safe_load_json_file(json_file: str):
-    "A helper to load safe config files and raise a proper error message if it wasn't serialized correctly"
-    try:
-        with open(json_file, encoding="utf-8") as reader:
-            text = reader.read()
-        config_dict = json.loads(text)
-    except json.JSONDecodeError:
-        raise OSError(f"It looks like the config file at '{json_file}' is not a valid JSON file.")
-    return config_dict
 
 
 class ModelOutput(OrderedDict):
@@ -257,7 +325,7 @@ class ModelOutput(OrderedDict):
         This is necessary to synchronize gradients when using `torch.nn.parallel.DistributedDataParallel` with
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
-        if _is_torch_available:
+        if is_torch_available():
             from torch.utils._pytree import register_pytree_node
 
             register_pytree_node(
@@ -381,7 +449,7 @@ class ModelOutput(OrderedDict):
         return tuple(self[k] for k in self.keys())
 
 
-if _is_torch_available:
+if is_torch_available():
     import torch.utils._pytree as _torch_pytree
 
     def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], "_torch_pytree.Context"]:
@@ -432,7 +500,9 @@ class TensorType(ExplicitEnum):
     """
 
     PYTORCH = "pt"
+    TENSORFLOW = "tf"
     NUMPY = "np"
+    JAX = "jax"
     MLX = "mlx"
 
 
@@ -461,7 +531,13 @@ def can_return_loss(model_class):
     Args:
         model_class (`type`): The class of the model.
     """
-    signature = inspect.signature(model_class.forward)
+    framework = infer_framework(model_class)
+    if framework == "tf":
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif framework == "pt":
+        signature = inspect.signature(model_class.forward)  # PyTorch models
+    else:
+        signature = inspect.signature(model_class.__call__)  # Flax models
 
     for p in signature.parameters:
         if p == "return_loss" and signature.parameters[p].default is True:
@@ -478,7 +554,13 @@ def find_labels(model_class):
         model_class (`type`): The class of the model.
     """
     model_name = model_class.__name__
-    signature = inspect.signature(model_class.forward)
+    framework = infer_framework(model_class)
+    if framework == "tf":
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif framework == "pt":
+        signature = inspect.signature(model_class.forward)  # PyTorch models
+    else:
+        signature = inspect.signature(model_class.__call__)  # Flax models
 
     if "QuestionAnswering" in model_name:
         return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
@@ -500,72 +582,142 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
     return dict(_flatten_dict(d, parent_key, delimiter))
 
 
+@contextmanager
+def working_or_temp_dir(working_dir, use_temp_dir: bool = False):
+    if use_temp_dir:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            yield tmp_dir
+    else:
+        yield working_dir
+
+
 def transpose(array, axes=None):
     """
-    Framework-agnostic version of transpose operation.
+    Framework-agnostic version of `numpy.transpose` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
     """
     if is_numpy_array(array):
         return np.transpose(array, axes=axes)
     elif is_torch_tensor(array):
         return array.T if axes is None else array.permute(*axes)
+    elif is_tf_tensor(array):
+        import tensorflow as tf
+
+        return tf.transpose(array, perm=axes)
+    elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
+        return jnp.transpose(array, axes=axes)
     else:
         raise ValueError(f"Type not supported for transpose: {type(array)}.")
 
 
 def reshape(array, newshape):
     """
-    Framework-agnostic version of reshape operation.
+    Framework-agnostic version of `numpy.reshape` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
     """
     if is_numpy_array(array):
         return np.reshape(array, newshape)
     elif is_torch_tensor(array):
         return array.reshape(*newshape)
+    elif is_tf_tensor(array):
+        import tensorflow as tf
+
+        return tf.reshape(array, newshape)
+    elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
+        return jnp.reshape(array, newshape)
     else:
         raise ValueError(f"Type not supported for reshape: {type(array)}.")
 
 
 def squeeze(array, axis=None):
     """
-    Framework-agnostic version of squeeze operation.
+    Framework-agnostic version of `numpy.squeeze` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
     """
     if is_numpy_array(array):
         return np.squeeze(array, axis=axis)
     elif is_torch_tensor(array):
         return array.squeeze() if axis is None else array.squeeze(dim=axis)
+    elif is_tf_tensor(array):
+        import tensorflow as tf
+
+        return tf.squeeze(array, axis=axis)
+    elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
+        return jnp.squeeze(array, axis=axis)
     else:
         raise ValueError(f"Type not supported for squeeze: {type(array)}.")
 
 
 def expand_dims(array, axis):
     """
-    Framework-agnostic version of expand_dims operation.
+    Framework-agnostic version of `numpy.expand_dims` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
     """
     if is_numpy_array(array):
         return np.expand_dims(array, axis)
     elif is_torch_tensor(array):
         return array.unsqueeze(dim=axis)
+    elif is_tf_tensor(array):
+        import tensorflow as tf
+
+        return tf.expand_dims(array, axis=axis)
+    elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
+        return jnp.expand_dims(array, axis=axis)
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
 
 
 def tensor_size(array):
     """
-    Framework-agnostic version of size operation.
+    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
     """
     if is_numpy_array(array):
         return np.size(array)
     elif is_torch_tensor(array):
         return array.numel()
+    elif is_tf_tensor(array):
+        import tensorflow as tf
+
+        return tf.size(array)
+    elif is_jax_tensor(array):
+        return array.size
     else:
         raise ValueError(f"Type not supported for tensor_size: {type(array)}.")
+
+
+def infer_framework(model_class):
+    """
+    Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
+    classes are imported or available.
+    """
+    for base_class in inspect.getmro(model_class):
+        module = base_class.__module__
+        name = base_class.__name__
+        if module.startswith("tensorflow") or module.startswith("keras") or name == "TFPreTrainedModel":
+            return "tf"
+        elif module.startswith("torch") or name == "PreTrainedModel":
+            return "pt"
+        elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
+            return "flax"
+    raise TypeError(f"Could not infer framework from class {model_class}.")
 
 
 def torch_int(x):
     """
     Casts an input to a torch int64 tensor if we are in a tracing context, otherwise to a Python int.
     """
-    if not _is_torch_available:
+    if not is_torch_available():
         return int(x)
+
+    import torch
 
     return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
@@ -574,13 +726,15 @@ def torch_float(x):
     """
     Casts an input to a torch float32 tensor if we are in a tracing context, otherwise to a Python float.
     """
-    if not _is_torch_available:
+    if not is_torch_available():
         return int(x)
+
+    import torch
 
     return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
-def filter_out_non_signature_kwargs(extra: list | None = None):
+def filter_out_non_signature_kwargs(extra: Optional[list] = None):
     """
     Decorator to filter out named arguments that are not in the function signature.
 
@@ -683,13 +837,13 @@ class TransformersKwargs(TypedDict, total=False):
     """
 
     num_items_in_batch: Optional["torch.Tensor"]
-    output_hidden_states: bool | None
-    output_attentions: bool | None
-    output_router_logits: bool | None
+    output_hidden_states: Optional[bool]
+    output_attentions: Optional[bool]
+    output_router_logits: Optional[bool]
     cu_seq_lens_q: Optional["torch.LongTensor"]
     cu_seq_lens_k: Optional["torch.LongTensor"]
-    max_length_q: int | None
-    max_length_k: int | None
+    max_length_q: Optional[int]
+    max_length_k: Optional[int]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -769,6 +923,8 @@ def can_return_tuple(func):
     return wrapper
 
 
+# if is_torch_available():
+# @torch._dynamo.disable
 @dataclass
 @requires(backends=("torch",))
 class OutputRecorder:
@@ -784,8 +940,8 @@ class OutputRecorder:
 
     target_class: "type[torch.nn.Module]"
     index: int = 0
-    layer_name: str | None = None
-    class_name: str | None = None
+    layer_name: Optional[str] = None
+    class_name: Optional[str] = None
 
 
 def check_model_inputs(tie_last_hidden_states=True):
@@ -804,21 +960,9 @@ def check_model_inputs(tie_last_hidden_states=True):
     def wrapped_fn(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            use_cache_arg_index = None
-            if "use_cache" in func.__code__.co_varnames:
-                use_cache_arg_index = func.__code__.co_varnames.index("use_cache") - 1  # -1 for self
-
-            if (
-                use_cache_arg_index is not None
-                and len(args) > use_cache_arg_index
-                and args[use_cache_arg_index] is not None
-            ):
-                use_cache = args[use_cache_arg_index]
-            elif kwargs.get("use_cache") is not None:
-                use_cache = kwargs["use_cache"]
-            else:
-                use_cache = getattr(self.config, "use_cache", None)
-
+            use_cache = (
+                kwargs["use_cache"] if kwargs.get("use_cache") is not None else getattr(self.config, "use_cache", None)
+            )
             if use_cache is not None:
                 if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
                     logger.warning_once(
@@ -826,12 +970,7 @@ def check_model_inputs(tie_last_hidden_states=True):
                     )
                     use_cache = False
 
-                if use_cache_arg_index is not None and len(args) > use_cache_arg_index:
-                    args = list(args)
-                    args[use_cache_arg_index] = use_cache
-                    args = tuple(args)
-                else:
-                    kwargs["use_cache"] = use_cache
+                kwargs["use_cache"] = use_cache
 
             return_dict = kwargs.pop("return_dict", None)
             if return_dict is None:
@@ -842,8 +981,7 @@ def check_model_inputs(tie_last_hidden_states=True):
                 for k, v in all_args["kwargs"].items():
                     all_args[k] = v
 
-            # _can_record_outputs is None by default
-            capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__)) or {}  # there is a weak ref for executorch
+            capture_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__), {})  # there is a weak ref for executorch
             recordable_keys = {
                 f"output_{k}": all_args.get(
                     f"output_{k}",
@@ -864,12 +1002,33 @@ def check_model_inputs(tie_last_hidden_states=True):
             collected_outputs = defaultdict(tuple)
             monkey_patched_layers = []
 
+            # Check attention implementation is properly set for capturing attention outputs
+            if recordable_keys.get("output_attentions", False):
+                supported_attn = ["eager", "eager_paged", "flex_attention"]
+                config_attn = getattr(self.config, "_attn_implementation", None)
+                sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
+                sub_configs_attn = [
+                    getattr(config, "_attn_implementation", None) for config in sub_configs if config is not None
+                ]
+                if config_attn not in supported_attn or any(attn not in supported_attn for attn in sub_configs_attn):
+                    warnings.warn(
+                        f"`output_attentions=True` is not supported with `attn_implementation` other than {supported_attn}. "
+                        "Please use `model.set_attn_implementation('eager')` to enable capturing attention outputs.",
+                        UserWarning,
+                    )
+
             def make_capture_wrapper(module, orig_forward, key, index):
                 @wraps(orig_forward)
                 def wrapped_forward(*args, **kwargs):
                     if key == "hidden_states" and len(collected_outputs[key]) == 0:
                         collected_outputs[key] += (args[0],)
-                    output = orig_forward(*args, **kwargs)
+                    if kwargs.get("debug_io", False):
+                        with model_addition_debugger_context(
+                            module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prune_layers")
+                        ):
+                            output = orig_forward(*args, **kwargs)
+                    else:
+                        output = orig_forward(*args, **kwargs)
                     if not isinstance(output, tuple):
                         collected_outputs[key] += (output,)
                     elif output[index] is not None:
@@ -910,13 +1069,7 @@ def check_model_inputs(tie_last_hidden_states=True):
                             monkey_patched_layers.append((module, original_forward))
 
             try:
-                if kwargs.get("debug_io", False):
-                    with model_addition_debugger_context(
-                        self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
-                    ):
-                        outputs = func(self, *args, **kwargs)
-                else:
-                    outputs = func(self, *args, **kwargs)
+                outputs = func(self, *args, **kwargs)
             except TypeError as original_exception:
                 # If we get a TypeError, it's possible that the model is not receiving the recordable kwargs correctly.
                 # Get a TypeError even after removing the recordable kwargs -> re-raise the original exception

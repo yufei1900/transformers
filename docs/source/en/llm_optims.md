@@ -114,8 +114,7 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 Another option for using [`StaticCache`] is to pass it to a models forward pass using the same `past_key_values` argument. This allows you to write your own custom decoding function to decode the next token given the current token, position, and cache position of previously generated tokens.
 
 ```py
-from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
-from accelerate import Accelerator
+from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging, infer_device
 from transformers.testing_utils import CaptureLogger
 import torch
 
@@ -125,7 +124,7 @@ prompts = [
 ]
 
 NUM_TOKENS_TO_GENERATE = 40
-torch_device = Accelerator().device
+torch_device = infer_device()
 
 tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
 model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
@@ -209,11 +208,10 @@ Enable speculative decoding by loading an assistant model and passing it to [`~G
 <hfoption id="greedy search">
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 import torch
 
-device = Accelerator().device
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("Einstein's theory of relativity states", return_tensors="pt").to(device)
@@ -231,11 +229,10 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 For speculative sampling decoding, add the [do_sample](https://hf.co/docs/transformers/main/en/main_classes/text_generation#transformers.GenerationConfig.do_sample) and [temperature](https://hf.co/docs/transformers/main/en/main_classes/text_generation#transformers.GenerationConfig.temperature) parameters to [`~GenerationMixin.generate`].
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 import torch
 
-device = Accelerator().device
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("Einstein's theory of relativity states", return_tensors="pt").to(device)
@@ -260,11 +257,10 @@ To enable prompt lookup decoding, specify the number of tokens that should be ov
 <hfoption id="greedy decoding">
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 import torch
 
-device = Accelerator().device
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("The second law of thermodynamics states", return_tensors="pt").to(device)
@@ -282,11 +278,10 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 For prompt lookup decoding with sampling, add the [do_sample](https://hf.co/docs/transformers/main/en/main_classes/text_generation#transformers.GenerationConfig.do_sample) and [temperature](https://hf.co/docs/transformers/main/en/main_classes/text_generation#transformers.GenerationConfig.temperature) parameters to [`~GenerationMixin.generate`].
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 import torch
 
-device = Accelerator().device
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("The second law of thermodynamics states", return_tensors="pt").to(device)
@@ -393,9 +388,3 @@ model = AutoModelForCausalLM.from_pretrained(
     "mistralai/Mistral-7B-v0.1", quantization_config=quant_config, device_map="auto"
 )
 ```
-
-## Continuous Batching
-
-When serving LLMs for inference, you may have multiple requests arriving at different times. Continuous Batching (CB) is a technique that groups incoming requests into batches to maximize GPU utilization and throughput.
-
-See the [Continuous Batching](./continuous_batching) guide for more details on how to use CB in transformers.

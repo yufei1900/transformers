@@ -25,8 +25,11 @@ from collections.abc import Sequence
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-import httpx
+
+if TYPE_CHECKING:
+    import torch
 import numpy as np
+import requests
 from packaging import version
 
 from .utils import (
@@ -38,9 +41,6 @@ from .utils import (
     requires_backends,
 )
 
-
-if TYPE_CHECKING:
-    import torch
 
 if is_soundfile_available():
     import soundfile as sf
@@ -132,9 +132,7 @@ def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeo
 
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
     if audio.startswith("http://") or audio.startswith("https://"):
-        audio = librosa.load(
-            BytesIO(httpx.get(audio, follow_redirects=True, timeout=timeout).content), sr=sampling_rate
-        )[0]
+        audio = librosa.load(BytesIO(requests.get(audio, timeout=timeout).content), sr=sampling_rate)[0]
     elif os.path.isfile(audio):
         audio = librosa.load(audio, sr=sampling_rate)[0]
     return audio
@@ -176,7 +174,7 @@ def load_audio_as(
         # Load audio bytes from URL or file
         audio_bytes = None
         if audio.startswith(("http://", "https://")):
-            response = httpx.get(audio, follow_redirects=True, timeout=timeout)
+            response = requests.get(audio, timeout=timeout)
             response.raise_for_status()
             audio_bytes = response.content
         elif os.path.isfile(audio):
@@ -217,18 +215,6 @@ def load_audio_as(
 
     except Exception as e:
         raise ValueError(f"Error loading audio: {e}")
-
-
-def conv1d_output_length(module: "torch.nn.Conv1d", input_length: int) -> int:
-    """
-    Computes the output length of a 1D convolution layer according to torch's documentation:
-    https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-    """
-    return int(
-        (input_length + 2 * module.padding[0] - module.dilation[0] * (module.kernel_size[0] - 1) - 1)
-        / module.stride[0]
-        + 1
-    )
 
 
 def is_valid_audio(audio):

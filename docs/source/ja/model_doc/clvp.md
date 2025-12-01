@@ -70,6 +70,7 @@ CLVP (Contrastive Language-Voice Pretrained Transformer) モデルは、James Be
 ## ClvpConfig
 
 [[autodoc]] ClvpConfig
+    - from_sub_model_configs
 
 ## ClvpEncoderConfig
 

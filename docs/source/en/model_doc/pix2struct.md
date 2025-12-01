@@ -47,6 +47,7 @@ The original code can be found [here](https://github.com/google-research/pix2str
 ## Pix2StructConfig
 
 [[autodoc]] Pix2StructConfig
+    - from_text_vision_configs
 
 ## Pix2StructTextConfig
 
@@ -63,11 +64,6 @@ The original code can be found [here](https://github.com/google-research/pix2str
 ## Pix2StructImageProcessor
 
 [[autodoc]] Pix2StructImageProcessor
-    - preprocess
-
-## Pix2StructImageProcessorFast
-
-[[autodoc]] Pix2StructImageProcessorFast
     - preprocess
 
 ## Pix2StructTextModel

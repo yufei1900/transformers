@@ -50,6 +50,9 @@ The main differences compared to GPT2.
 
 You can read more about the optimizations in the [original pull request](https://github.com/huggingface/transformers/pull/22575)
 
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
+
 ## Combining Starcoder and Flash Attention 2
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
@@ -64,9 +67,8 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 ```python
 >>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
->>> device = Accelerator().device # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+>>> device = infer_device() # the device to load the model onto
 
 >>> model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", dtype=torch.float16, attn_implementation="flash_attention_2")
 >>> tokenizer = AutoTokenizer.from_pretrained("bigcode/gpt_bigcode-santacoder")

@@ -43,3 +43,4 @@ Most of those are only useful if you are studying the general code in the librar
 ## Other Utilities
 
 [[autodoc]] utils._LazyModule
+[[autodoc]] pytorch_utils.infer_device

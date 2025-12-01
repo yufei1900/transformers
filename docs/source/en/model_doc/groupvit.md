@@ -46,6 +46,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## GroupViTConfig
 
 [[autodoc]] GroupViTConfig
+    - from_text_vision_configs
 
 ## GroupViTTextConfig
 

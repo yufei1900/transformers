@@ -122,6 +122,11 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DeiTConfig
 
+## DeiTFeatureExtractor
+
+[[autodoc]] DeiTFeatureExtractor
+    - __call__
+
 ## DeiTImageProcessor
 
 [[autodoc]] DeiTImageProcessor

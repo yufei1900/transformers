@@ -20,7 +20,7 @@ import torch
 from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
 from ...image_transforms import (
     get_resize_output_image_size,
     group_images_by_shape,
@@ -39,7 +39,15 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from .image_processing_textnet import TextNetImageProcessorKwargs
+
+
+class TextNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    size_divisor (`int`, *optional*, defaults to 32):
+        Ensures height and width are rounded to a multiple of this value after resizing.
+    """
+
+    size_divisor: Optional[int]
 
 
 @auto_docstring
@@ -56,13 +64,13 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
     size_divisor = 32
-    valid_kwargs = TextNetImageProcessorKwargs
+    valid_kwargs = TextNetFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

@@ -27,6 +27,12 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] Adafactor
 
+## AdamWeightDecay (TensorFlow)[[transformers.AdamWeightDecay]]
+
+[[autodoc]] AdamWeightDecay
+
+[[autodoc]] create_optimizer
+
 ## 스케줄[[schedules]]
 
 ### 학습률 스케줄 (PyTorch)[[transformers.SchedulerType]]
@@ -58,3 +64,13 @@ rendered properly in your Markdown viewer.
 [[autodoc]] get_inverse_sqrt_schedule
 
 [[autodoc]] get_wsd_schedule
+
+### 웜업 (TensorFlow)[[transformers.WarmUp]]
+
+[[autodoc]] WarmUp
+
+## 그래디언트 전략[[gradient-strategies]]
+
+### GradientAccumulator (TensorFlow)[[transformers.GradientAccumulator]]
+
+[[autodoc]] GradientAccumulator

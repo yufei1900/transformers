@@ -41,6 +41,7 @@ class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
+        "images_kwargs": {},
     }
 
 
@@ -60,8 +61,13 @@ class Blip2Processor(ProcessorMixin):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
+    tokenizer_class = "AutoTokenizer"
+
     def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
         tokenizer.return_token_type_ids = False
+        self.current_processor = image_processor
         if not hasattr(tokenizer, "image_token"):
             self.image_token = AddedToken("<image>", normalized=False, special=True)
             tokenizer.add_tokens([self.image_token], special_tokens=True)
@@ -75,6 +81,8 @@ class Blip2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[Blip2ProcessorKwargs],
     ) -> BatchEncoding:
         """
@@ -92,8 +100,10 @@ class Blip2Processor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
                     - `'pt'`: Return PyTorch `torch.Tensor` objects.
                     - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")

@@ -37,6 +37,7 @@ python utils/check_dummies.py --fix_and_overwrite
 import argparse
 import os
 import re
+from typing import Optional
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -72,7 +73,7 @@ def {0}(*args, **kwargs):
 """
 
 
-def find_backend(line: str) -> str | None:
+def find_backend(line: str) -> Optional[str]:
     """
     Find one (or multiple) backend in a code line of the init.
 
@@ -155,7 +156,7 @@ def create_dummy_object(name: str, backend_name: str) -> str:
         return DUMMY_CLASS.format(name, backend_name)
 
 
-def create_dummy_files(backend_specific_objects: dict[str, list[str]] | None = None) -> dict[str, str]:
+def create_dummy_files(backend_specific_objects: Optional[dict[str, list[str]]] = None) -> dict[str, str]:
     """
     Create the content of the dummy files.
 

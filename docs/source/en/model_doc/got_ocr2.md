@@ -48,10 +48,9 @@ The original code can be found [here](https://github.com/Ucas-HaoranWei/GOT-OCR2
 
 ```python
 >>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
+>>> from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
->>> device = Accelerator().device
+>>> device = infer_device()
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
 >>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
@@ -74,10 +73,9 @@ from accelerate import Accelerator
 
 ```python
 >>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
+>>> from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
->>> device = Accelerator().device
+>>> device = infer_device()
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
 >>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
@@ -104,10 +102,9 @@ GOT-OCR2 can also generate formatted text, such as markdown or LaTeX. Here is an
 
 ```python
 >>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
+>>> from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
->>> device = Accelerator().device
+>>> device = infer_device()
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
 >>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
@@ -133,10 +130,9 @@ Here is an example of how to process multiple pages at once:
 
 ```python
 >>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
+>>> from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
->>> device = Accelerator().device
+>>> device = infer_device()
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
 >>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
@@ -163,10 +159,9 @@ Here is an example of how to process cropped patches:
 
 ```python
 >>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
+>>> from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
->>> device = Accelerator().device
+>>> device = infer_device()
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", dtype=torch.bfloat16, device_map=device)
 >>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
@@ -193,7 +188,7 @@ GOT supports interactive OCR, where the user can specify the region to be recogn
 >>> import torch
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 
->>> device = Accelerator().device
+>>> device = infer_device()
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
 >>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
@@ -219,11 +214,10 @@ Here is an example of how to process sheet music:
 
 ```python
 >>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
+>>> from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 >>> import verovio
 
->>> device = Accelerator().device
+>>> device = infer_device()
 >>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
 >>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 

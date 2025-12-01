@@ -161,6 +161,9 @@ class ClvpEncoderTester:
 @require_torch
 class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpEncoder,) if is_torch_available() else ()
+    test_pruning = False
+    test_head_masking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = ClvpEncoderTester(self)
@@ -184,10 +187,6 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ClvpEncoder does not output loss")
     def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="ClvpEncoder does not output loss")
-    def test_gradient_checkpointing_enable_disable(self):
         pass
 
 
@@ -282,6 +281,8 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (ClvpModel, ClvpForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ClvpModelForConditionalGeneration} if is_torch_available() else {}
 
+    test_pruning = False
+
     def setUp(self):
         self.model_tester = ClvpDecoderTester(self)
         self.decoder_config_tester = ConfigTester(self, config_class=ClvpDecoderConfig, hidden_size=32)
@@ -315,6 +316,21 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         loss = model(**inputs).loss
         loss.backward()
 
+    def test_training_gradient_checkpointing(self):
+        # we will only test the ClvpForCausalLM since it outputs loss
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_cache = False
+        config.return_dict = True
+
+        model = ClvpForCausalLM(config)
+        model.to(torch_device)
+        model.gradient_checkpointing_enable()
+        model.train()
+        inputs = self._prepare_for_class(inputs_dict, ClvpForCausalLM, return_labels=True)
+
+        loss = model(**inputs).loss
+        loss.backward()
+
     @unittest.skip(reason="Clvp `prepare_inputs_for_generation` function doesn't have cache position.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
@@ -344,10 +360,10 @@ class ClvpModelForConditionalGenerationTester:
         speech_config = self.clvp_encoder_tester.get_config()
         speech_config.vocab_size = 300
 
-        return ClvpConfig(
-            text_config=text_config,
-            speech_config=speech_config,
-            decoder_config=decoder_config,
+        return ClvpConfig.from_sub_model_configs(
+            text_config,
+            speech_config,
+            decoder_config,
             projection_dim=16,
         )
 
@@ -395,8 +411,11 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
     all_generative_model_classes = ()
 
+    test_head_masking = False
+    test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)

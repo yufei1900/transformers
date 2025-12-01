@@ -144,6 +144,8 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 ## 훈련 하기[[train]]
 
+<frameworkcontent>
+<pt>
 <Tip>
 
 [`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)를 살펴보세요!
@@ -196,6 +198,93 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```py
 >>> trainer.push_to_hub()
 ```
+</pt>
+<tf>
+<Tip>
+
+Keras로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-a-tensorflow-model-with-keras)를 살펴보시기 바랍니다!
+
+</Tip>
+TensorFlow에서 모델을 미세 조정하려면 최적화 함수, 학습률 스케쥴 및 몇 가지 학습 하이퍼파라미터를 설정하는 것부터 시작하세요:
+
+```py
+>>> from transformers import create_optimizer
+
+>>> batch_size = 16
+>>> num_train_epochs = 2
+>>> total_train_steps = (len(tokenized_swag["train"]) // batch_size) * num_train_epochs
+>>> optimizer, schedule = create_optimizer(init_lr=5e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
+```
+
+그리고 [`TFAutoModelForMultipleChoice`]로 BERT를 가져올 수 있습니다:
+
+```py
+>>> from transformers import TFAutoModelForMultipleChoice
+
+>>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
+```
+
+[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터 세트를 `tf.data.Dataset` 형식으로 변환합니다:
+
+```py
+>>> data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
+>>> tf_train_set = model.prepare_tf_dataset(
+...     tokenized_swag["train"],
+...     shuffle=True,
+...     batch_size=batch_size,
+...     collate_fn=data_collator,
+... )
+
+>>> tf_validation_set = model.prepare_tf_dataset(
+...     tokenized_swag["validation"],
+...     shuffle=False,
+...     batch_size=batch_size,
+...     collate_fn=data_collator,
+... )
+```
+
+[`compile`](https://keras.io/api/models/model_training_apis/#compile-method)을 사용하여 훈련 모델을 구성합니다:
+
+```py
+>>> model.compile(optimizer=optimizer)
+```
+
+훈련을 시작하기 전에 설정해야 할 마지막 두 가지는 예측의 정확도를 계산하고 모델을 허브로 푸시하는 방법을 제공하는 것입니다. 이 두 가지 작업은 모두 [Keras 콜백](../main_classes/keras_callbacks)을 사용하여 수행할 수 있습니다.
+
+`compute_metrics`함수를 [`~transformers.KerasMetricCallback`]에 전달하세요:
+
+```py
+>>> from transformers.keras_callbacks import KerasMetricCallback
+
+>>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
+```
+
+모델과 토크나이저를 업로드할 위치를 [`~transformers.PushToHubCallback`]에서 지정하세요:
+
+```py
+>>> from transformers.keras_callbacks import PushToHubCallback
+
+>>> push_to_hub_callback = PushToHubCallback(
+...     output_dir="my_awesome_model",
+...     tokenizer=tokenizer,
+... )
+```
+
+그리고 콜백을 함께 묶습니다:
+
+```py
+>>> callbacks = [metric_callback, push_to_hub_callback]
+```
+
+이제 모델 훈련을 시작합니다! 훈련 및 검증 데이터 세트, 에폭 수, 콜백을 사용하여 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)을 호출하고 모델을 미세 조정합니다:
+
+```py
+>>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2, callbacks=callbacks)
+```
+
+훈련이 완료되면 모델이 자동으로 허브에 업로드되어 누구나 사용할 수 있습니다!
+</tf>
+</frameworkcontent>
 
 
 <Tip>
@@ -218,6 +307,8 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> candidate2 = "The law applies to baguettes."
 ```
 
+<frameworkcontent>
+<pt>
 각 프롬프트와 후보 답변 쌍을 토큰화하여 PyTorch 텐서를 반환합니다. 또한 `labels`을 생성해야 합니다:
 
 ```py
@@ -245,3 +336,34 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> predicted_class
 '0'
 ```
+</pt>
+<tf>
+각 프롬프트와 후보 답안 쌍을 토큰화하여 텐서플로 텐서를 반환합니다:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_swag_model")
+>>> inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors="tf", padding=True)
+```
+
+모델에 입력을 전달하고 `logits`를 반환합니다:
+
+```py
+>>> from transformers import TFAutoModelForMultipleChoice
+
+>>> model = TFAutoModelForMultipleChoice.from_pretrained("my_awesome_swag_model")
+>>> inputs = {k: tf.expand_dims(v, 0) for k, v in inputs.items()}
+>>> outputs = model(inputs)
+>>> logits = outputs.logits
+```
+
+가장 높은 확률을 가진 클래스를 가져옵니다:
+
+```py
+>>> predicted_class = int(tf.math.argmax(logits, axis=-1)[0])
+>>> predicted_class
+'0'
+```
+</tf>
+</frameworkcontent>

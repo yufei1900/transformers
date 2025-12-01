@@ -15,6 +15,7 @@
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional, Union
 
 from .generation.configuration_utils import GenerationConfig
 from .training_args import TrainingArguments
@@ -51,7 +52,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
-    generation_max_length: int | None = field(
+    generation_max_length: Optional[int] = field(
         default=None,
         metadata={
             "help": (
@@ -60,7 +61,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             )
         },
     )
-    generation_num_beams: int | None = field(
+    generation_num_beams: Optional[int] = field(
         default=None,
         metadata={
             "help": (
@@ -69,7 +70,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             )
         },
     )
-    generation_config: str | Path | GenerationConfig | None = field(
+    generation_config: Optional[Union[str, Path, GenerationConfig]] = field(
         default=None,
         metadata={
             "help": "Model id, file path or url pointing to a GenerationConfig json file, to use during prediction."

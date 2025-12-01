@@ -29,7 +29,7 @@ import torch.nn.functional as F
 from torchvision.ops.boxes import batched_nms
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -39,17 +39,17 @@ from ...image_utils import (
     SizeDict,
     pil_torch_interpolation_mapping,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
 
 
-class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
+class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
     """
 
-    mask_size: dict[str, int]
+    mask_size: Optional[dict[str, int]]
 
 
 def _compute_stability_score(masks: "torch.Tensor", mask_threshold: float, stability_score_offset: int):
@@ -463,9 +463,11 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
         pixel_values = self._preprocess(images, **images_kwargs)
+        reshaped_input_sizes = [image.shape[-2:] for image in images]
         data = {
             "pixel_values": pixel_values,
             "original_sizes": original_sizes,
+            "reshaped_input_sizes": reshaped_input_sizes,
         }
 
         if segmentation_maps is not None:
@@ -491,14 +493,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             data["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> "torch.Tensor":
-        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def generate_crop_boxes(
         self,
@@ -533,7 +527,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
             return_tensors (`str`, *optional*, defaults to `pt`):
-                If `pt`, returns `torch.Tensor`.
+                If `pt`, returns `torch.Tensor`. If `tf`, returns `tf.Tensor`.
         """
         image = self._process_image(image)
         crop_boxes, points_per_crop, cropped_images, input_labels = _generate_crop_boxes(
@@ -675,7 +669,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
-                raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
             if apply_non_overlapping_constraints:
                 interpolated_mask = self._apply_non_overlapping_constraints(interpolated_mask)
@@ -700,6 +694,17 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
                 Threshold for NMS (Non Maximum Suppression) algorithm.
         """
         return _post_process_for_mask_generation(all_masks, all_scores, all_boxes, crops_nms_thresh)
+
+    def pad_image(self):
+        raise NotImplementedError("No pad_image for SAM 2.")
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> "torch.Tensor":
+        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
         """

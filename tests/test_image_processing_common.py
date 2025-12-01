@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import inspect
-import io
 import json
 import os
 import pathlib
@@ -24,9 +24,9 @@ import warnings
 from copy import deepcopy
 from datetime import datetime
 
-import httpx
 import numpy as np
 import pytest
+import requests
 from packaging import version
 
 from transformers import AutoImageProcessor, BatchFeature
@@ -185,9 +185,7 @@ class ImageProcessingTestMixin:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
         dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
         )
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
@@ -519,8 +517,8 @@ class ImageProcessingTestMixin:
                 image_inputs[0],
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=[0.0, 0.0, 0.0, 0.0],
-                image_std=[1.0, 1.0, 1.0, 1.0],
+                image_mean=0,
+                image_std=1,
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
@@ -530,8 +528,8 @@ class ImageProcessingTestMixin:
                 image_inputs,
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=[0.0, 0.0, 0.0, 0.0],
-                image_std=[1.0, 1.0, 1.0, 1.0],
+                image_mean=0,
+                image_std=1,
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(

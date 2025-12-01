@@ -24,7 +24,6 @@ rendered properly in your Markdown viewer.
 </div>
 
 ## Overview
-
 [SmolVLM2](https://huggingface.co/papers/2504.05299) ([blog post](https://huggingface.co/blog/smolvlm2)) is an adaptation of the Idefics3 model with two main differences:
 
 - It uses SmolLM2 for the text model.
@@ -159,7 +158,7 @@ conversation3 = [
 
 conversations = [conversation1, conversation2, conversation3]
 inputs = processor.apply_chat_template(
-    conversations,
+    conversation,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
@@ -194,21 +193,17 @@ print(generated_texts[0])
     - forward
 
 ## SmolVLMImageProcessor
-
 [[autodoc]] SmolVLMImageProcessor
     - preprocess
 
 ## SmolVLMImageProcessorFast
-
 [[autodoc]] SmolVLMImageProcessorFast
     - preprocess
 
 ## SmolVLMVideoProcessor
-
 [[autodoc]] SmolVLMVideoProcessor
     - preprocess
 
 ## SmolVLMProcessor
-
 [[autodoc]] SmolVLMProcessor
     - __call__

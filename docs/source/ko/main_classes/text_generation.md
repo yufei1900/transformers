@@ -44,3 +44,13 @@ rendered properly in your Markdown viewer.
 	- generate
 	- compute_transition_scores
 
+## TFGenerationMixin [[transformers.TFGenerationMixin]]
+
+[[autodoc]] generation.TFGenerationMixin
+	- generate
+	- compute_transition_scores
+
+## FlaxGenerationMixin [[transformers.FlaxGenerationMixin]]
+
+[[autodoc]] generation.FlaxGenerationMixin
+	- generate

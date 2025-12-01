@@ -38,7 +38,6 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -47,16 +46,6 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-class DeepseekVLImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    min_size: int
 
 
 class DeepseekVLImageProcessor(BaseImageProcessor):
@@ -100,8 +89,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
-
-    valid_kwargs = DeepseekVLImageProcessorKwargs
 
     def __init__(
         self,
@@ -258,8 +245,10 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
+                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -289,7 +278,10 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

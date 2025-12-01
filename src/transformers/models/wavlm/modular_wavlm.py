@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ... import initialization as init
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_layers import GradientCheckpointingLayer
@@ -508,45 +507,43 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     config: WavLMConfig
     base_model_prefix = "wavlm"
     main_input_name = "input_values"
-    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # gumbel softmax requires special init
         if isinstance(module, WavLMGumbelVectorQuantizer):
-            init.normal_(module.weight_proj.weight, mean=0.0, std=1)
-            init.zeros_(module.weight_proj.bias)
-            init.uniform_(module.codevectors)
+            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
+            module.weight_proj.bias.data.zero_()
+            nn.init.uniform_(module.codevectors)
         elif isinstance(module, WavLMPositionalConvEmbedding):
-            init.normal_(
+            nn.init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            init.constant_(module.conv.bias, 0)
+            nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, WavLMFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            init.uniform_(module.projection.weight, a=-k, b=k)
-            init.uniform_(module.projection.bias, a=-k, b=k)
+            nn.init.uniform_(module.projection.weight, a=-k, b=k)
+            nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            init.kaiming_normal_(module.weight)
+            nn.init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                init.uniform_(module.bias, a=-k, b=k)
+                nn.init.uniform_(module.bias, a=-k, b=k)
 
     def _get_adapters(self):
         raise AttributeError("Not needed for WavLM")

@@ -42,10 +42,9 @@ Let's see the pipeline in action. First, initialize the pipeline. If you don't p
 
 ```python
 import torch
-from transformers import pipeline
-from accelerate import Accelerator
+from transformers import pipeline, infer_device
 # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
-device = Accelerator().device
+DEVICE = infer_device()
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
 ```
 

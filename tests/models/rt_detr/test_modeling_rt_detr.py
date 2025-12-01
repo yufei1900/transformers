@@ -180,7 +180,7 @@ class RTDetrModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        return RTDetrConfig(
+        return RTDetrConfig.from_backbone_configs(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
             encoder_in_channels=hidden_sizes[1:],
@@ -258,7 +258,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     is_encoder_decoder = True
-
+    test_torchscript = False
+    test_pruning = False
+    test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = True
 
@@ -663,7 +665,6 @@ def prepare_img():
 
 @require_torch
 @require_vision
-@slow
 class RTDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):

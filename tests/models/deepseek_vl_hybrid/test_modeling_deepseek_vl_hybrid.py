@@ -35,7 +35,6 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -155,7 +154,7 @@ class DeepseekVLHybridModelTester:
 
 
 @require_torch
-class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (DeepseekVLHybridModel, DeepseekVLHybridForConditionalGeneration) if is_torch_available() else ()
     )
@@ -163,13 +162,13 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         {
             "feature-extraction": DeepseekVLHybridModel,
             "image-text-to-text": DeepseekVLHybridForConditionalGeneration,
-            "any-to-any": DeepseekVLHybridForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
     _is_composite = True
-    model_split_percents = [0.5, 0.85, 0.9]  # it tries to offload everything with the default value
+    test_pruning = False
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = DeepseekVLHybridModelTester(self)
@@ -272,13 +271,6 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
                     and submodule.config._attn_implementation == "eager"
                 ):
                     self.assertTrue(submodule.config._attn_implementation == "sdpa")
-
-    @require_torch_accelerator
-    @slow
-    def test_sdpa_can_dispatch_on_flash(self):
-        self.skipTest(
-            "deepseek_vl_hybrid uses SAM, which requires an attention_mask input for relative positional embeddings"
-        )
 
 
 @require_torch

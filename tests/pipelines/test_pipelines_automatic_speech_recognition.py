@@ -35,7 +35,6 @@ from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_microphone_live
 from transformers.pipelines.automatic_speech_recognition import chunk_iter
 from transformers.testing_utils import (
-    Expectations,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     is_torch_available,
@@ -161,7 +160,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_pt_defaults(self):
-        pipeline("automatic-speech-recognition")
+        pipeline("automatic-speech-recognition", framework="pt")
 
     @require_torch
     def test_small_model_pt(self):
@@ -169,6 +168,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
+            framework="pt",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -188,6 +188,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
+            framework="pt",
             dtype=torch.float16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -208,6 +209,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-small-mustc-en-fr-st",
             tokenizer="facebook/s2t-small-mustc-en-fr-st",
+            framework="pt",
             dtype=torch.bfloat16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -237,6 +239,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_small_model_pt_seq2seq(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/tiny-random-speech-encoder-decoder",
+            framework="pt",
             max_new_tokens=19,
             num_beams=1,
         )
@@ -249,6 +252,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_small_model_pt_seq2seq_gen_kwargs(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/tiny-random-speech-encoder-decoder",
+            framework="pt",
             max_new_tokens=10,
         )
 
@@ -265,6 +269,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm",
+            framework="pt",
         )
         self.assertEqual(speech_recognizer.type, "ctc_with_lm")
 
@@ -328,6 +333,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             pipeline(
                 task="automatic-speech-recognition",
                 model="patrickvonplaten/tiny-wav2vec2-no-tokenizer",
+                framework="pt",
             )
 
     @require_torch
@@ -337,6 +343,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-base-960h",
             tokenizer="facebook/wav2vec2-base-960h",
+            framework="pt",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -353,6 +360,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="hf-audio/wav2vec2-bert-CV16-en",
+            framework="pt",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -592,6 +600,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
+            framework="pt",
             num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -608,6 +617,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
+            framework="pt",
             num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:2]")
@@ -904,6 +914,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/s2t-wav2vec2-large-en-de",
             feature_extractor="facebook/s2t-wav2vec2-large-en-de",
+            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -967,6 +978,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
+            framework="pt",
             num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1036,6 +1048,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-large",
+            framework="pt",
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         audio = ds[40]["audio"]
@@ -1071,6 +1084,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
+            framework="pt",
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio = ds[0]["audio"]
@@ -1094,6 +1108,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
+            framework="pt",
         )
         output = speech_recognizer(ds[0]["audio"], generate_kwargs={"language": "en"})
         self.assertEqual(
@@ -1105,7 +1120,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_speculative_decoding_whisper_non_distil(self):
         # Load data:
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
-        sample = dataset[0]["audio"].get_all_samples().data
+        sample = dataset[0]["audio"]
 
         # Load model:
         model_id = "openai/whisper-large-v2"
@@ -1134,8 +1149,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             num_beams=1,
         )
 
-        transcription_ass = pipe(sample.clone().detach(), generate_kwargs={"assistant_model": assistant_model})["text"]
-        transcription_non_ass = pipe(sample)["text"]
+        transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
+        transcription_ass = pipe(sample)["text"]
 
         self.assertEqual(transcription_ass, transcription_non_ass)
         self.assertEqual(
@@ -1193,6 +1208,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-xls-r-1b-21-to-en",
             feature_extractor="facebook/wav2vec2-xls-r-1b-21-to-en",
+            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -1208,6 +1224,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-xls-r-1b-en-to-15",
             feature_extractor="facebook/wav2vec2-xls-r-1b-en-to-15",
+            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -1224,6 +1241,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="patrickvonplaten/wav2vec2-2-bart-base",
             feature_extractor="patrickvonplaten/wav2vec2-2-bart-base",
             tokenizer=AutoTokenizer.from_pretrained("patrickvonplaten/wav2vec2-2-bart-base"),
+            framework="pt",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -1239,6 +1257,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="facebook/wav2vec2-conformer-rope-large-960h-ft",
             device=torch_device,
             dtype=torch.float16,
+            framework="pt",
         )
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1423,13 +1442,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
         dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
-        sample = dataset[0]["audio"].get_all_samples().data
+        sample = dataset[0]["audio"]
 
         # prompt the model to misspell "Mr Quilter" as "Mr Quillter"
         whisper_prompt = "Mr. Quillter."
         prompt_ids = pipe.tokenizer.get_prompt_ids(whisper_prompt, return_tensors="pt").to(torch_device)
 
-        unprompted_result = pipe(sample.clone().detach())["text"]
+        unprompted_result = pipe(sample.copy())["text"]
         prompted_result = pipe(sample, generate_kwargs={"prompt_ids": prompt_ids})["text"]
 
         # fmt: off
@@ -1444,14 +1463,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_whisper_longform(self):
         # fmt: off
-        EXPECTED_RESULTS = Expectations(
-            {
-                (None, None): " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on Saturday, Rusty Cargo, container down by the Wharf, and challenge toothless drifters to the godless bughouse lets of tournament that is my segment. MUSIC Meanwhile!",
-                ("xpu", None): " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting of classics, Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a Fisher shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I... APPLAUSE Sometimes I... Startle away, upside down on the monkey bars of a condemned playground on a superfund site. Get all heaped up on goofballs, rummaged that would discard a tag bag of defective toys, yank out a fist bowl of disembodied doll limbs, toss them on a stain kid's place mat from a defunct denys, set up a table inside a rusty cargo container down by the Wharf and challenge toothless drifters to the godless bug house blitz of tournament that is my segment.",
-            }
-        )
+        EXPECTED_RESULT = " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on Saturday, Rusty Cargo, container down by the Wharf, and challenge toothless drifters to the godless bughouse lets of tournament that is my segment. MUSIC Meanwhile!"
         # fmt: on
-        EXPECTED_RESULT = EXPECTED_RESULTS.get_expectation()
 
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
@@ -1504,6 +1517,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
+            framework="pt",
             chunk_length_s=10.0,
         )
 

@@ -22,6 +22,7 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -38,7 +39,16 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from .image_processing_convnext import ConvNextImageProcessorKwargs
+
+
+class ConvNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    crop_pct (`float`, *optional*):
+        Percentage of the image to crop. Only has an effect if size < 384. Can be
+        overridden by `crop_pct` in the`preprocess` method.
+    """
+
+    crop_pct: Optional[float]
 
 
 @auto_docstring
@@ -52,13 +62,13 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     crop_pct = 224 / 256
-    valid_kwargs = ConvNextImageProcessorKwargs
+    valid_kwargs = ConvNextFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ConvNextImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

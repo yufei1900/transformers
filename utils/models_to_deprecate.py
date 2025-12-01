@@ -92,8 +92,8 @@ EXTRA_TAGS_MAPPING = {
     "gemma3": ["gemma3_text"],
     "gemma3n": ["gemma3n_audio", "gemma3n_text", "gemma3n_vision"],
     "gpt2": ["cpm", "dialogpt", "gpt-sw3", "megatron_gpt2"],
-    "glm4v_moe": ["glm4v_moe_text", "glm4v_moe_vision"],
-    "glm4v": ["glm4v_text", "glm4v_vision"],
+    "glm4v_moe": ["glm4v_moe_text"],
+    "glm4v": ["glm4v_text"],
     "idefics3": ["idefics3_vision"],
     "internvl": ["internvl_vision"],
     "layoutlmv2": ["layoutxlm"],
@@ -155,6 +155,10 @@ def _extract_commit_hash(commits):
 def get_list_of_repo_model_paths(models_dir):
     # Get list of all models in the library
     models = glob.glob(os.path.join(models_dir, "*/modeling_*.py"))
+
+    # Remove flax and tf models
+    models = [model for model in models if "_flax_" not in model]
+    models = [model for model in models if "_tf_" not in model]
 
     # Get list of all deprecated models in the library
     deprecated_models = glob.glob(os.path.join(models_dir, "deprecated", "*"))

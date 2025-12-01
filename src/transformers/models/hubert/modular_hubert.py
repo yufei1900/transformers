@@ -19,7 +19,6 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutput
@@ -129,43 +128,43 @@ class HubertPreTrainedModel(PreTrainedModel):
     config: HubertConfig
     base_model_prefix = "hubert"
     main_input_name = "input_values"
-    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 
                 if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
                     with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-                        init.kaiming_normal_(module.weight)
+                        nn.init.kaiming_normal_(module.weight.data)
                 else:
                     with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-                        init.kaiming_normal_(module.weight)
+                        nn.init.kaiming_normal_(module.weight.data)
             else:
-                init.kaiming_normal_(module.weight)
+                nn.init.kaiming_normal_(module.weight.data)
 
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, HubertModel):
             if hasattr(module, "masked_spec_embed"):
-                init.uniform_(module.masked_spec_embed)
+                module.masked_spec_embed.data.uniform_()
         elif isinstance(module, HubertForSequenceClassification):
             if hasattr(module, "layer_weights"):
-                init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
+                module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
@@ -214,6 +213,9 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         self.post_init()
 
         del self.adapter
+
+    def freeze_feature_extractor(self):
+        raise AttributeError("Not needed for Hubert")
 
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Hubert")

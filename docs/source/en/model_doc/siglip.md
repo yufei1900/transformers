@@ -130,6 +130,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ## SiglipConfig
 
 [[autodoc]] SiglipConfig
+    - from_text_vision_configs
 
 ## SiglipTextConfig
 

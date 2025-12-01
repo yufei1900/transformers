@@ -134,7 +134,10 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else {}
     )
 
+    fx_compatible = False
+    test_pruning = False
     test_resize_embeddings = False
+    test_head_masking = False
     has_attentions = False
     test_torch_exportable = True
 

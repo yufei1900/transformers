@@ -25,7 +25,12 @@ import torch
 from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -37,7 +42,17 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_segformer import SegformerImageProcessorKwargs
+
+
+class SegformerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_reduce_labels: Optional[bool]
 
 
 @auto_docstring
@@ -53,10 +68,10 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_reduce_labels = False
-    valid_kwargs = SegformerImageProcessorKwargs
+    valid_kwargs = SegformerFastImageProcessorKwargs
     rescale_factor = 1 / 255
 
-    def __init__(self, **kwargs: Unpack[SegformerImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[SegformerFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def reduce_label(self, labels: list["torch.Tensor"]):
@@ -74,7 +89,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[SegformerImageProcessorKwargs],
+        **kwargs: Unpack[SegformerFastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -89,7 +104,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[SegformerImageProcessorKwargs],
+        **kwargs: Unpack[SegformerFastImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -174,7 +189,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
-        Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps.
+        Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
             outputs ([`SegformerForSemanticSegmentation`]):
@@ -188,6 +203,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
+        # TODO: add support for other frameworks
         logits = outputs.logits
 
         # Resize logits and compute semantic segmentation maps

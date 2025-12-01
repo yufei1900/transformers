@@ -72,6 +72,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## CLIPSegConfig
 
 [[autodoc]] CLIPSegConfig
+    - from_text_vision_configs
 
 ## CLIPSegTextConfig
 

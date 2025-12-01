@@ -65,6 +65,7 @@ Transformerエンコーダーに画像を与えるには、各画像を固定サ
 ## AltCLIPConfig
 
 [[autodoc]] AltCLIPConfig
+    - from_text_vision_configs
 
 ## AltCLIPTextConfig
 

@@ -42,7 +42,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BitsAndBytesConfig,
         Idefics3Config,
         Idefics3ForConditionalGeneration,
         Idefics3Model,
@@ -167,8 +166,11 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Idefics3Model,) if is_torch_available() else ()
-
+    fx_compatible = False
+    test_torchscript = False
+    test_pruning = False
     test_resize_embeddings = True
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
@@ -285,7 +287,6 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
-            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -332,8 +333,11 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
-
+    fx_compatible = False
+    test_pruning = False
     test_resize_embeddings = True
+    test_head_masking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
@@ -442,7 +446,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
-            model.eval()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_vocab_size = config.text_config.vocab_size
@@ -530,7 +533,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            load_in_4bit=True,
             device_map="auto",
         )
 

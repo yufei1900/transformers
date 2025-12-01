@@ -60,6 +60,8 @@ ESMFold는 [Matt](https://huggingface.co/Rocketknight1)와 [Sylvain](https://hug
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
+<frameworkcontent>
+<pt>
 
 ## EsmModel [[transformers.EsmModel]]
 
@@ -86,3 +88,28 @@ ESMFold는 [Matt](https://huggingface.co/Rocketknight1)와 [Sylvain](https://hug
 [[autodoc]] EsmForProteinFolding
     - forward
 
+</pt>
+<tf>
+
+## TFEsmModel [[transformers.TFEsmModel]]
+
+[[autodoc]] TFEsmModel
+    - call
+
+## TFEsmForMaskedLM [[transformers.TFEsmForMaskedLM]]
+
+[[autodoc]] TFEsmForMaskedLM
+    - call
+
+## TFEsmForSequenceClassification [[transformers.TFEsmForSequenceClassification]]
+
+[[autodoc]] TFEsmForSequenceClassification
+    - call
+
+## TFEsmForTokenClassification [[transformers.TFEsmForTokenClassification]]
+
+[[autodoc]] TFEsmForTokenClassification
+    - call
+
+</tf>
+</frameworkcontent>

@@ -85,6 +85,15 @@ This model was contributed by [francesco](https://huggingface.co/francesco). The
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
+## MaskFormerFeatureExtractor
+
+[[autodoc]] MaskFormerFeatureExtractor
+    - __call__
+    - encode_inputs
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
+
 ## MaskFormerModel
 
 [[autodoc]] MaskFormerModel

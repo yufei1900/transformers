@@ -20,7 +20,7 @@ from typing import Optional, Union
 import torch
 from torchvision.transforms.v2 import functional as F
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
@@ -28,7 +28,19 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
+
+
+class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Args:
+        rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
+            Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
+        include_top (`bool`, *optional*, defaults to `self.include_top`):
+            Normalize the image again with the standard deviation only for image classification if set to True.
+    """
+
+    rescale_offset: bool
+    include_top: bool
 
 
 @auto_docstring
@@ -45,9 +57,9 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     rescale_offset = False
     do_normalize = True
     include_top = True
-    valid_kwargs = EfficientNetImageProcessorKwargs
+    valid_kwargs = EfficientNetFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[EfficientNetImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def rescale(
@@ -183,7 +195,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
 

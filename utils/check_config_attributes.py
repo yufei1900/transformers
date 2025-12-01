@@ -17,7 +17,7 @@ import inspect
 import os
 import re
 
-from transformers.configuration_utils import PreTrainedConfig
+from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import direct_transformers_import
 
 
@@ -32,15 +32,10 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
-    "AfmoeConfig": [
-        "global_attn_every_n_layers",  # used internally in config to generate `layer_types`
-        "rope_scaling",  # used internally in config to generate `rope_parameters`
-    ],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Ernie4_5Config": ["tie_word_embeddings"],
     "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
     "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
-    "Lfm2MoeConfig": ["tie_word_embeddings"],
     # used internally during generation to provide the custom logit processors with their necessary information
     "DiaConfig": [
         "delay_pattern",
@@ -59,7 +54,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_period",
     ],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
-    "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2MoeConfig": ["use_sliding_window"],
     "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2_5_VLTextConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2_5OmniTextConfig": ["use_sliding_window", "max_window_layers"],
@@ -70,10 +65,8 @@ SPECIAL_CASES_TO_ALLOW = {
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
     "Cohere2Config": ["cache_implementation"],
-    "JetMoeConfig": ["output_router_logits"],
     # Dropout with this value was declared but never used
     "Phi3Config": ["embd_pdrop"],
-    "PhimoeConfig": ["max_position_embeddings"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute `frame_rate`
@@ -128,8 +121,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
-    # used by sam3 video, kept here for consistency with sam2
-    "Sam3VisionConfig": ["backbone_feature_sizes"],
     # used internally to calculate `mlp_dim`
     "SamHQVisionConfig": ["mlp_ratio"],
     # For (head) training, but so far not implemented
@@ -315,10 +306,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
     "VaultGemmaConfig": ["tie_word_embeddings"],
-    "GemmaConfig": ["tie_word_embeddings"],
-    "CsmConfig": ["tie_codebooks_embeddings"],
-    "LayoutXLMConfig": True,
-    "DeepseekV2Config": ["norm_topk_prob"],
 }
 
 
@@ -409,8 +396,6 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
         "initializer_range",
-        "init_std",
-        "initializer_factor",
         "bos_index",
         "eos_index",
         "pad_index",
@@ -446,7 +431,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     if not attribute_used:
         case_allowed = False
         for attribute in attributes:
-            # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
+            # Allow if the default value in the configuration class is different from the one in `PretrainedConfig`
             if attribute == "is_encoder_decoder" and default_value is True:
                 case_allowed = True
             elif attribute == "tie_word_embeddings" and default_value is False:
@@ -487,6 +472,7 @@ def check_config_attributes_being_used(config_class):
     # Get the path to modeling source files
     config_source_file = inspect.getsourcefile(config_class)
     model_dir = os.path.dirname(config_source_file)
+    # Let's check against all frameworks: as long as one framework uses an attribute, we are good.
     modeling_paths = [os.path.join(model_dir, fn) for fn in os.listdir(model_dir) if fn.startswith("modeling_")]
 
     # Get the source code strings
@@ -524,7 +510,7 @@ def check_config_attributes():
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
                 lambda x: inspect.isclass(x)
-                and issubclass(x, PreTrainedConfig)
+                and issubclass(x, PretrainedConfig)
                 and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]

@@ -4,26 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_grounding_dino.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
-# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import pathlib
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -34,6 +14,7 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -46,18 +27,40 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
-from .image_processing_grounding_dino import GroundingDinoImageProcessorKwargs, get_size_with_aspect_ratio
+from .image_processing_grounding_dino import get_size_with_aspect_ratio
 
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+
+
+logger = logging.get_logger(__name__)
+
+
+class GroundingDinoFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the GROUNDING_DINO model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+        Whether to return segmentation masks.
+    """
+
+    format: Optional[Union[str, AnnotationFormat]]
+    do_convert_annotations: Optional[bool]
+    return_segmentation_masks: Optional[bool]
+
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -301,13 +304,22 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = GroundingDinoImageProcessorKwargs
+    valid_kwargs = GroundingDinoFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[GroundingDinoImageProcessorKwargs]) -> None:
-        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask", self.do_pad))
+    def __init__(self, **kwargs: Unpack[GroundingDinoFastImageProcessorKwargs]) -> None:
+        if "pad_and_return_pixel_mask" in kwargs:
+            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
         size = kwargs.pop("size", None)
-        max_size = None if size is None else kwargs.pop("max_size", 1333)
+        if "max_size" in kwargs:
+            logger.warning_once(
+                "The `max_size` parameter is deprecated and will be removed in v4.26. "
+                "Please specify in `size['longest_edge'] instead`.",
+            )
+            max_size = kwargs.pop("max_size")
+        else:
+            max_size = None if size is None else 1333
+
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
@@ -318,6 +330,20 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
         super().__init__(**kwargs)
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
+        created using from_dict and kwargs e.g. `GroundingDinoImageProcessorFast.from_pretrained(checkpoint, size=600,
+        max_size=800)`
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "max_size" in kwargs:
+            image_processor_dict["max_size"] = kwargs.pop("max_size")
+        if "pad_and_return_pixel_mask" in kwargs:
+            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
+        return super().from_dict(image_processor_dict, **kwargs)
 
     def prepare_annotation(
         self,
@@ -537,6 +563,45 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         pixel_mask[: original_size[0], : original_size[1]] = 1
 
         return image, pixel_mask, annotation
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[GroundingDinoFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
+            List of annotations associated with the image or batch of images. If annotation is for object
+            detection, the annotations should be a dictionary with the following keys:
+            - "image_id" (`int`): The image id.
+            - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
+                dictionary. An image can have no annotations, in which case the list should be empty.
+            If annotation is for segmentation, the annotations should be a dictionary with the following keys:
+            - "image_id" (`int`): The image id.
+            - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                An image can have no segments, in which case the list should be empty.
+            - "file_name" (`str`): The file name of the image.
+        masks_path (`str` or `pathlib.Path`, *optional*):
+            Path to the directory containing the segmentation masks.
+        """
+        if "pad_and_return_pixel_mask" in kwargs:
+            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
+            logger.warning_once(
+                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
+                "use `do_pad` instead."
+            )
+
+        if "max_size" in kwargs:
+            logger.warning_once(
+                "The `max_size` argument is deprecated and will be removed in a future version, use"
+                " `size['longest_edge']` instead."
+            )
+            kwargs["size"] = kwargs.pop("max_size")
+
+        return super().preprocess(images, annotations, masks_path, **kwargs)
 
     def _preprocess(
         self,

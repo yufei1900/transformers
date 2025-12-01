@@ -20,6 +20,7 @@ from huggingface_hub import AudioClassificationOutputElement
 
 from transformers import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+    TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
     is_torch_available,
 )
 from transformers.pipelines import AudioClassificationPipeline, pipeline
@@ -42,6 +43,7 @@ if is_torch_available():
 @is_pipeline_test
 class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     _dataset = None
 
     @classmethod

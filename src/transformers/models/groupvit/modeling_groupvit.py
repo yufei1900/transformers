@@ -22,7 +22,6 @@ import numpy as np
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -746,40 +745,40 @@ class GroupViTEncoderLayer(GradientCheckpointingLayer):
 class GroupViTPreTrainedModel(PreTrainedModel):
     config: GroupViTConfig
     base_model_prefix = "groupvit"
-    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
 
         init_range = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=init_range)
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=init_range)
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
         factor = self.config.initializer_factor
         if isinstance(module, GroupViTTextEmbeddings):
-            init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
-            init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, GroupViTAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
-            init.normal_(module.q_proj.weight, std=in_proj_std)
-            init.normal_(module.k_proj.weight, std=in_proj_std)
-            init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
+            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, GroupViTMLP):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            nn.init.normal_(module.fc1.weight, std=fc_std)
+            nn.init.normal_(module.fc2.weight, std=in_proj_std)
 
 
 class GroupViTVisionEncoder(nn.Module):
@@ -1022,7 +1021,6 @@ class GroupViTTextTransformer(nn.Module):
 
 class GroupViTTextModel(GroupViTPreTrainedModel):
     config: GroupViTTextConfig
-    input_modalities = ("text",)
 
     def __init__(self, config: GroupViTTextConfig):
         super().__init__(config)
@@ -1127,7 +1125,6 @@ class GroupViTVisionTransformer(nn.Module):
 class GroupViTVisionModel(GroupViTPreTrainedModel):
     config: GroupViTVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
 
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__(config)

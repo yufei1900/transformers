@@ -30,7 +30,6 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 
 
@@ -44,15 +43,6 @@ if is_vision_available():
     import PIL
 
 logger = logging.get_logger(__name__)
-
-
-class SuperPointImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    do_grayscale (`bool`, *optional*, defaults to `True`):
-        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
-    """
-
-    do_grayscale: bool
 
 
 def is_grayscale(
@@ -74,7 +64,8 @@ def convert_to_grayscale(
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> ImageInput:
     """
-    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
+    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image. TODO support torch
+    and tensorflow grayscale conversion
 
     This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
     channel, because of an issue that is discussed in :
@@ -130,7 +121,6 @@ class SuperPointImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
-    valid_kwargs = SuperPointImageProcessorKwargs
 
     def __init__(
         self,
@@ -229,8 +219,10 @@ class SuperPointImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
+                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -256,7 +248,10 @@ class SuperPointImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
 
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")

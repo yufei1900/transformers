@@ -105,7 +105,6 @@ This example demonstrates how to perform inference on a single image with the In
 ```
 
 ### Text-only generation
-
 This example shows how to generate text using the InternVL model without providing any image input.
 
 ```python
@@ -135,7 +134,6 @@ This example shows how to generate text using the InternVL model without providi
 ```
 
 ### Batched image and text inputs
-
 InternVL models also support batched image and text inputs.
 
 ```python
@@ -179,7 +177,6 @@ InternVL models also support batched image and text inputs.
 ```
 
 ### Batched multi-image input
-
 This implementation of the InternVL models supports batched text-images inputs with different number of images for each text.
 
 ```python
@@ -223,7 +220,6 @@ This implementation of the InternVL models supports batched text-images inputs w
 ```
 
 ### Video input
-
 InternVL models can also handle video inputs. Here is an example of how to perform inference on a video input using chat templates.
 
 ```python
@@ -263,7 +259,6 @@ InternVL models can also handle video inputs. Here is an example of how to perfo
 ```
 
 ### Interleaved image and video inputs
-
 This example showcases how to handle a batch of chat conversations with interleaved image and video inputs using chat template.
 
 ```python

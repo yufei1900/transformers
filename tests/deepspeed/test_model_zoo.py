@@ -161,6 +161,7 @@ def make_task_cmds():
         --num_train_epochs 1
         --fp16
         --report_to none
+        --overwrite_output_dir
         """.split()
 
     # try to cover as many models as possible once (it's enough to run on one task per model)
@@ -182,7 +183,7 @@ def make_task_cmds():
             "pegasus",
         ],
         "clm": [
-            # "big_bird", not use why there is an issue with the architecture, some modules are not ZeROOrderedDict suddenly
+            "big_bird",
             "bigbird_pegasus",
             "blenderbot",
             "bloom",

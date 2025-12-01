@@ -40,7 +40,6 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 from ...utils.import_utils import is_vision_available
 
@@ -50,21 +49,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
-
-
-class NougatImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    do_crop_margin (`bool`, *optional*, defaults to `True`):
-        Whether to crop the image margins.
-    do_thumbnail (`bool`, *optional*, defaults to `True`):
-        Whether to resize the image using thumbnail method.
-    do_align_long_axis (`bool`, *optional*, defaults to `False`):
-        Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-    """
-
-    do_crop_margin: bool
-    do_thumbnail: bool
-    do_align_long_axis: bool
 
 
 class NougatImageProcessor(BaseImageProcessor):
@@ -103,7 +87,6 @@ class NougatImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
-    valid_kwargs = NougatImageProcessorKwargs
 
     def __init__(
         self,
@@ -436,8 +419,10 @@ class NougatImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -466,7 +451,10 @@ class NougatImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

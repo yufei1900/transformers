@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 
@@ -69,6 +69,12 @@ class EetqHfQuantizer(HfQuantizer):
 
         if not is_accelerate_available():
             raise ImportError("Loading an EETQ quantized model requires accelerate (`pip install accelerate`)")
+
+        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
+            raise ValueError(
+                "Converting into 8-bit weights from tf/flax weights is currently not supported, please make"
+                " sure the weights are in PyTorch format."
+            )
 
         if not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
@@ -137,10 +143,13 @@ class EetqHfQuantizer(HfQuantizer):
         module._buffers[tensor_name] = new_value.to(target_device)
         module.register("weight_scales", weight_scale.to(target_device))
 
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        return model
+
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import replace_with_eetq_linear

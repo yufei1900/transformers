@@ -15,12 +15,17 @@
 """BEiT model configuration"""
 
 import warnings
+from collections import OrderedDict
+from collections.abc import Mapping
 
-from ...configuration_utils import PreTrainedConfig
+from packaging import version
+
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
-class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
+class BeitConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -204,4 +209,21 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
         self.reshape_hidden_states = reshape_hidden_states
 
 
-__all__ = ["BeitConfig"]
+# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+class BeitOnnxConfig(OnnxConfig):
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
+
+
+__all__ = ["BeitConfig", "BeitOnnxConfig"]

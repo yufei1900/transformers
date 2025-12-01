@@ -72,6 +72,9 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 
 [[autodoc]] Phi3Config
 
+<frameworkcontent>
+<pt>
+
 ## Phi3Model
 
 [[autodoc]] Phi3Model
@@ -92,3 +95,6 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 
 [[autodoc]] Phi3ForTokenClassification
     - forward
+
+</pt>
+</frameworkcontent>

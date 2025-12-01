@@ -43,7 +43,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -108,6 +107,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
             "model_type": "blip_2_qformer",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
+            "position_embedding_type": "absolute",
             "use_qformer_text_input": False,
             "vocab_size": 30522,
         },
@@ -212,15 +212,14 @@ class GraniteSpeechForConditionalGenerationModelTester:
 
 
 @require_torch
-class GraniteSpeechForConditionalGenerationModelTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
-):
+class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `GraniteSpeechForConditionalGeneration`.
     """
 
     all_model_classes = (GraniteSpeechForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"any-to-any": GraniteSpeechForConditionalGeneration} if is_torch_available() else {}
+    test_pruning = False
+    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -293,10 +292,6 @@ class GraniteSpeechForConditionalGenerationModelTest(
     @slow
     @unittest.skip(reason="Granite Speech doesn't support SDPA for all backbones")
     def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @unittest.skip(reason="GraniteSpeech has no separate base model without a head.")
-    def test_model_base_model_prefix(self):
         pass
 
 

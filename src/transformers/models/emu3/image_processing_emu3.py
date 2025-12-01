@@ -37,7 +37,6 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -45,11 +44,6 @@ if is_vision_available():
     from PIL import Image
 
 logger = logging.get_logger(__name__)
-
-
-class Emu3ImageProcessorKwargs(ImagesKwargs, total=False):
-    ratio: str
-    image_area: int
 
 
 def smart_resize(
@@ -114,7 +108,6 @@ class Emu3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "image_sizes"]
-    valid_kwargs = Emu3ImageProcessorKwargs
 
     def __init__(
         self,
@@ -336,8 +329,10 @@ class Emu3ImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -367,7 +362,10 @@ class Emu3ImageProcessor(BaseImageProcessor):
             images = make_nested_list_of_images(images)
 
         if images is not None and not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
 
         validate_preprocess_arguments(
             rescale_factor=rescale_factor,

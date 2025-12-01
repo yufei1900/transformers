@@ -1,7 +1,7 @@
-from transformers import PreTrainedConfig
+from transformers import PretrainedConfig
 
 
-class CustomConfig(PreTrainedConfig):
+class CustomConfig(PretrainedConfig):
     model_type = "custom"
 
     def __init__(self, attribute=1, **kwargs):

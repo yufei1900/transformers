@@ -69,6 +69,12 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DPTConfig
 
+## DPTFeatureExtractor
+
+[[autodoc]] DPTFeatureExtractor
+    - __call__
+    - post_process_semantic_segmentation
+
 ## DPTImageProcessor
 
 [[autodoc]] DPTImageProcessor

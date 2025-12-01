@@ -14,20 +14,17 @@
 """PyTorch GPTBigCode model."""
 
 import math
-from collections.abc import Callable
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import is_flash_attn_available
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -52,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 # Fused kernels
 # Use separate functions for each case because conditionals prevent kernel fusion.
-# TODO: Could have better fused kernels depending on scaling and dropout.
+# TODO: Could have better fused kernels depending on scaling, dropout and head mask.
 #  Is it doable without writing 32 functions?
 @torch.jit.script
 def upcast_masked_softmax(
@@ -100,6 +97,7 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
@@ -112,6 +110,9 @@ def eager_attention_forward(
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -171,6 +172,7 @@ class GPTBigCodeAttention(nn.Module):
         hidden_states: torch.Tensor,
         layer_past: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
@@ -188,11 +190,11 @@ class GPTBigCodeAttention(nn.Module):
                 is_updated = layer_past.is_updated.get(self.layer_idx)
                 if self.is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_values = layer_past.cross_attention_cache
+                    curr_past_key_value = layer_past.cross_attention_cache
                 else:
-                    curr_past_key_values = layer_past.self_attention_cache
+                    curr_past_key_value = layer_past.self_attention_cache
             else:
-                curr_past_key_values = layer_past
+                curr_past_key_value = layer_past
 
         if self.is_cross_attention:
             if not hasattr(self, "q_attn") or not self.is_cross_attention:
@@ -202,8 +204,8 @@ class GPTBigCodeAttention(nn.Module):
                 )
             if layer_past is not None and is_updated:
                 # reuse k,v, cross_attentions
-                key = curr_past_key_values.layers[self.layer_idx].keys
-                value = curr_past_key_values.layers[self.layer_idx].values
+                key = curr_past_key_value.layers[self.layer_idx].keys
+                value = curr_past_key_value.layers[self.layer_idx].values
             else:
                 query = self.q_attn(hidden_states).view(*input_shape, -1, self.head_dim).transpose(1, 2)
                 key, value = self.c_attn(encoder_hidden_states).split((self.head_dim, self.head_dim), dim=-1)
@@ -224,7 +226,7 @@ class GPTBigCodeAttention(nn.Module):
         if layer_past is not None:
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
             cache_position = cache_position if not self.is_cross_attention else None
-            key, value = curr_past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
+            key, value = curr_past_key_value.update(key, value, self.layer_idx, {"cache_position": cache_position})
             # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
             if self.is_cross_attention:
                 layer_past.is_updated[self.layer_idx] = True
@@ -241,6 +243,7 @@ class GPTBigCodeAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attn_dropout,
             scaling=self.scaling,
+            head_mask=head_mask,
             **kwargs,
         )
 
@@ -268,7 +271,7 @@ class GPTBigCodeMLP(nn.Module):
         return hidden_states
 
 
-class GPTBigCodeBlock(GradientCheckpointingLayer):
+class GPTBigCodeBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -293,9 +296,10 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: Optional[tuple[torch.Tensor]],
-        encoder_hidden_states: Optional[torch.Tensor] = None,
         layer_past: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
@@ -310,6 +314,7 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
             hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
+            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -332,6 +337,7 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
             cross_attn_outputs = self.crossattention(
                 hidden_states,
                 attention_mask=attention_mask,
+                head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
@@ -363,10 +369,8 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        super()._init_weights(module)
         if isinstance(module, (GPTBigCodeMLP, GPTBigCodeAttention)):
             # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
             #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
@@ -374,9 +378,23 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
             #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
             #
             # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-            init.normal_(
-                module.c_proj.weight, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer)
+            module.c_proj.weight.data.normal_(
+                mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
             )
+            module.c_proj._is_hf_initialized = True
+        elif isinstance(module, nn.Linear):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 @auto_docstring
@@ -418,6 +436,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -465,7 +484,14 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             raise ValueError("batch_size has to be defined and > 0")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and isinstance(past_key_values, tuple):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+            )
+            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
@@ -509,6 +535,12 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             else:
                 encoder_attention_mask = None
 
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # head_mask has shape n_layer x batch x n_heads x N x N
+        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
+
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds.to(inputs_embeds.device)
 
@@ -528,10 +560,11 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             outputs = block(
-                hidden_states,  # as a positional argument for gradient checkpointing
+                hidden_states,
+                past_key_values,
+                causal_mask,
+                head_mask[i],
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
-                layer_past=past_key_values,  # as keyword argument so it can be removed by GradientCheckpointingLayer
-                attention_mask=causal_mask,
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -568,7 +601,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     """
 )
 class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -586,6 +619,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -595,7 +629,6 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
@@ -624,6 +657,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -633,23 +667,26 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
             return_dict=return_dict,
             cache_position=cache_position,
         )
-
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        lm_logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                lm_logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
+            output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
-            logits=logits,
+            logits=lm_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
@@ -689,6 +726,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -723,6 +761,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -820,6 +859,7 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -853,6 +893,7 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,

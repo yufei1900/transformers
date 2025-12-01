@@ -22,7 +22,6 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
@@ -81,7 +80,7 @@ def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> tupl
 
 
 class WeightStandardizedConv2d(nn.Conv2d):
-    """Conv2d with Weight Standardization. Used for ViT Hybrid model.
+    """Conv2d with Weight Standardization. Includes TensorFlow compatible SAME padding. Used for ViT Hybrid model.
 
     Paper: [Micro-Batch Training with Batch-Channel Normalization and Weight
     Standardization](https://huggingface.co/papers/1903.10520v2)
@@ -198,6 +197,8 @@ class DynamicPad2d(nn.Module):
 
 
 class BitMaxPool2d(nn.MaxPool2d):
+    """Tensorflow like 'SAME' wrapper for 2D max pooling"""
+
     def __init__(
         self,
         kernel_size: int,
@@ -279,6 +280,11 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -625,24 +631,22 @@ class BitEncoder(nn.Module):
 class BitPreTrainedModel(PreTrainedModel):
     config: BitConfig
     base_model_prefix = "bit"
-    input_modalities = ("image",)
     main_input_name = "pixel_values"
     _no_split_modules = ["BitEmbeddings"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
-            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
         # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
         elif isinstance(module, nn.Linear):
-            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
-                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                init.uniform_(module.bias, -bound, bound)
+                nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-            init.constant_(module.weight, 1)
-            init.constant_(module.bias, 0)
+            nn.init.constant_(module.weight, 1)
+            nn.init.constant_(module.bias, 0)
 
 
 @auto_docstring

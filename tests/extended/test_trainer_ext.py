@@ -17,6 +17,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -28,8 +29,11 @@ from transformers.testing_utils import (
     backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
+    require_apex,
     require_bitsandbytes,
+    require_non_xpu,
     require_torch,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
     slow,
@@ -102,6 +106,23 @@ class TestTrainerExt(TestCasePlus):
     @require_torch_multi_accelerator
     def test_run_seq2seq_ddp(self):
         self.run_seq2seq_quick(distributed=True)
+
+    @require_non_xpu
+    @require_apex
+    @require_torch_gpu
+    def test_run_seq2seq_apex(self):
+        # XXX: apex breaks the trainer if it's run twice e.g. run_seq2seq.main() from the same
+        # program and it breaks other tests that run from the same pytest worker, therefore until this is
+        # sorted out it must be run only in an external program, that is distributed=True in this
+        # test and only under one or more gpus - if we want cpu will need to make a special test
+        #
+        # specifically to the problem traced it to self.optimizer.step() - if it's run 2nd time via
+        # 2nd main() call it botches the future eval.
+        #
+        self.run_seq2seq_quick(distributed=True, extra_args_str="--fp16 --fp16_backend=apex")
+        # test 2nd time - was getting eval_loss': nan'
+        # to reproduce the problem set distributed=False
+        self.run_seq2seq_quick(distributed=True, extra_args_str="--fp16 --fp16_backend=apex")
 
     @parameterized.expand(["base", "low", "high", "mixed"])
     @require_torch_multi_accelerator
@@ -250,13 +271,13 @@ class TestTrainerExt(TestCasePlus):
         learning_rate: float = 3e-3,
         optim: str = "adafactor",
         distributed: bool = False,
-        extra_args_str: str | None = None,
+        extra_args_str: Optional[str] = None,
         eval_steps: int = 0,
         predict_with_generate: bool = True,
         do_train: bool = True,
         do_eval: bool = True,
         do_predict: bool = True,
-        n_gpus_to_use: int | None = None,
+        n_gpus_to_use: Optional[int] = None,
     ):
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
@@ -266,6 +287,7 @@ class TestTrainerExt(TestCasePlus):
             --validation_file {data_dir}/val.json
             --test_file {data_dir}/test.json
             --output_dir {output_dir}
+            --overwrite_output_dir
             --max_train_samples 8
             --max_source_length {max_len}
             --max_target_length {max_len}
@@ -309,7 +331,10 @@ class TestTrainerExt(TestCasePlus):
             args += ["--predict_with_generate"]
 
         if do_train:
-            args += f"--optim {optim}".split()
+            if optim == "adafactor":
+                args += ["--adafactor"]
+            else:
+                args += f"--optim {optim}".split()
 
         if extra_args_str is not None:
             args += extra_args_str.split()

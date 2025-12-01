@@ -13,7 +13,6 @@
 # limitations under the License.
 import inspect
 import os
-from collections.abc import Callable
 from functools import partial
 from typing import Optional, TypedDict
 
@@ -25,7 +24,6 @@ from .utils import (
     is_flash_attn_3_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
-    is_torch_xpu_available,
     logging,
 )
 
@@ -47,16 +45,10 @@ def flash_attn_supports_top_left_mask():
 
 # TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
-    return (
-        is_flash_attn_3_available()
-        or is_flash_attn_2_available()
-        or is_torch_npu_available()
-        or is_torch_xpu_available()
-    )
+    return is_flash_attn_3_available() or is_flash_attn_2_available() or is_torch_npu_available()
 
 
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves
-_loaded_implementation = None
 _flash_fn = None
 _flash_varlen_fn = None
 _pad_fn = None
@@ -71,7 +63,7 @@ _hf_api_to_flash_mapping = {
 }
 
 
-def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Callable] = None):
+def _lazy_imports(implementation: Optional[str]):
     """
     Lazy loads the respective flash attention implementations.
 
@@ -87,9 +79,6 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    is_paged = implementation.startswith("paged|")
-    implementation = implementation.split("|")[1] if is_paged else implementation
-
     if (implementation == "flash_attention_2" and is_fa2) or (implementation is None and is_fa2 and not is_fa3):
         from flash_attn import flash_attn_func, flash_attn_varlen_func
         from flash_attn.bert_padding import pad_input, unpad_input
@@ -103,24 +92,12 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
         # Kernels fallback
         else:
-            from .integrations.hub_kernels import load_and_register_attn_kernel
-
-            # We want to explicitly register the name with `paged|` if found
-            kernel_implementation = f"paged|{implementation}" if is_paged else implementation
-            kernel = load_and_register_attn_kernel(kernel_implementation, attention_wrapper)
-
-            flash_attn_func = getattr(kernel, "flash_attn_func", None)
-            flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
-            if flash_attn_varlen_func is None:
+            flash_attn_func = getattr(implementation, "flash_attn_func", None)
+            flash_attn_varlen_func = getattr(implementation, "flash_attn_varlen_func", None)
+            if flash_attn_varlen_func is None or flash_attn_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
-                    "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
-                )
-            if flash_attn_func is None:
-                logger.warning(
-                    f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
-                    "it can only be used with continous batching and does not support the full functionality for "
-                    "the base transformers generation methods."
+                    f"Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn`."
                 )
 
     return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input
@@ -147,37 +124,22 @@ def _lazy_define_process_function(flash_function):
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation: Optional[str], attention_wrapper: Optional[Callable] = None):
+def lazy_import_flash_attention(implementation: Optional[str], force_import: Optional[bool] = False):
     """
     Lazily import flash attention and return the respective functions + flags.
 
     NOTE: For fullgraph, this needs to be called before compile, while no fullgraph can
-    work without preloading. See `load_and_register_attn_kernel` in `integrations.hub_kernels`.
+    work without preloading. See `load_and_register_kernel` in `integrations.hub_kernels`.
     """
-    global _loaded_implementation
-    if implementation is None and _loaded_implementation is None:
-        raise ValueError("Could not find any flash attn implementation based on your environment.")
+    global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn
+    if force_import or any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
+        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
 
-    global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn, _process_flash_kwargs_fn
-    if implementation is not None and _loaded_implementation != implementation:
-        _loaded_implementation = implementation
-
-        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation, attention_wrapper)
+    global _process_flash_kwargs_fn
+    if force_import or _process_flash_kwargs_fn is None:
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
-
-
-def lazy_import_paged_flash_attention(implementation: Optional[str]):
-    """
-    Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
-    """
-    from .integrations.flash_paged import paged_attention_forward
-
-    (_, flash_attn_varlen_func, _, _), _ = lazy_import_flash_attention(
-        implementation, attention_wrapper=paged_attention_forward
-    )
-    return flash_attn_varlen_func
 
 
 def _index_first_axis(tensor, indices):
@@ -583,7 +545,7 @@ def _flash_attention_forward(
     max_length_q: Optional[int] = None,
     max_length_k: Optional[int] = None,
     target_dtype: Optional[torch.dtype] = None,
-    attn_implementation: Optional[str] = None,
+    implementation: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -602,11 +564,11 @@ def _flash_attention_forward(
         attention_mask (`torch.Tensor`, *optional*):
             The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
             position of padding tokens and 1 for the position of non-padding tokens.
-        attn_implementation (`str`, *optional*):
+        implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
     """
     (flash_fn, flash_varlen_fn, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
-        attn_implementation
+        implementation
     )
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op

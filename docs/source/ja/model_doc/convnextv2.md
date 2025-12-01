@@ -55,3 +55,14 @@ ConvNeXt V2 の使用を開始するのに役立つ公式 Hugging Face および
 
 [[autodoc]] ConvNextV2ForImageClassification
     - forward
+
+## TFConvNextV2Model
+
+[[autodoc]] TFConvNextV2Model
+    - call
+
+
+## TFConvNextV2ForImageClassification
+
+[[autodoc]] TFConvNextV2ForImageClassification
+    - call

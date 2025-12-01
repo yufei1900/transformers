@@ -61,10 +61,10 @@ pipeline(image=image, question="What time is the coffee break?")
 # pip install datasets
 import torch
 from datasets import load_dataset
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoProcessor, AutoModelForVision2Seq
 
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
-model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
+model = AutoModelForVision2Seq.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
 
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
@@ -92,11 +92,11 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 # pip install datasets torchao
 import torch
 from datasets import load_dataset
-from transformers import TorchAoConfig, AutoProcessor, AutoModelForImageTextToText
+from transformers import TorchAoConfig, AutoProcessor, AutoModelForVision2Seq
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
-model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", quantization_config=quantization_config)
+model = AutoModelForVision2Seq.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", quantization_config=quantization_config)
 
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
@@ -119,15 +119,14 @@ print(answer)
 
     ```py
     >>> import re
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
-    >>> from accelerate import Accelerator
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel, infer_device
     >>> from datasets import load_dataset
     >>> import torch
 
     >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
     >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
 
-    >>> device = Accelerator().device
+    >>> device = infer_device()
     >>> model.to(device)  # doctest: +IGNORE_RESULT
 
     >>> # load document image
@@ -162,15 +161,14 @@ print(answer)
 
     ```py
     >>> import re
-    >>> from accelerate import Accelerator
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel, infer_device
     >>> from datasets import load_dataset
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
     >>> import torch
 
     >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
     >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
 
-    >>> device = Accelerator().device
+    >>> device = infer_device()
     >>> model.to(device)  # doctest: +IGNORE_RESULT
 
     >>> # load document image
@@ -215,6 +213,11 @@ print(answer)
 
 [[autodoc]] DonutImageProcessorFast
     - preprocess
+
+## DonutFeatureExtractor
+
+[[autodoc]] DonutFeatureExtractor
+    - __call__
 
 ## DonutProcessor
 

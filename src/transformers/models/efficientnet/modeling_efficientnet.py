@@ -20,7 +20,6 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
@@ -434,16 +433,16 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     config: EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
     _no_split_modules = []
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
 
 
 @auto_docstring

@@ -304,6 +304,9 @@ class LongformerModelTester:
 
 @require_torch
 class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    test_pruning = False  # pruning is not supported
+    test_torchscript = False
+
     all_model_classes = (
         (
             LongformerModel,

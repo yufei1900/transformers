@@ -16,6 +16,7 @@
 Image/Text processor class for OWLv2
 """
 
+import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
@@ -29,7 +30,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, is_torch_available
+from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available
 
 
 if TYPE_CHECKING:
@@ -46,6 +47,7 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": "max_length",
         },
+        "images_kwargs": {},
         "common_kwargs": {
             "return_tensors": "np",
         },
@@ -65,6 +67,10 @@ class Owlv2Processor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = ("Owlv2ImageProcessor", "Owlv2ImageProcessorFast")
+    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
+
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
 
@@ -73,6 +79,8 @@ class Owlv2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
         **kwargs: Unpack[Owlv2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -97,8 +105,10 @@ class Owlv2Processor(ProcessorMixin):
                 should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -115,7 +125,7 @@ class Owlv2Processor(ProcessorMixin):
             **kwargs,
         )
         query_images = output_kwargs["images_kwargs"].pop("query_images", None)
-        return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
+        return_tensors = output_kwargs["common_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:
             raise ValueError(
@@ -147,11 +157,24 @@ class Owlv2Processor(ProcessorMixin):
                 input_ids = np.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
                 attention_mask = np.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
 
+            elif return_tensors == "jax" and is_flax_available():
+                import jax.numpy as jnp
+
+                input_ids = jnp.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
+                attention_mask = jnp.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
+
             elif return_tensors == "pt" and is_torch_available():
                 import torch
 
                 input_ids = torch.cat([encoding["input_ids"] for encoding in encodings], dim=0)
                 attention_mask = torch.cat([encoding["attention_mask"] for encoding in encodings], dim=0)
+
+            elif return_tensors == "tf" and is_tf_available():
+                import tensorflow as tf
+
+                input_ids = tf.stack([encoding["input_ids"] for encoding in encodings], axis=0)
+                attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings], axis=0)
+
             else:
                 raise ValueError("Target return tensor type could not be returned")
 
@@ -168,6 +191,19 @@ class Owlv2Processor(ProcessorMixin):
             data["pixel_values"] = image_features.pixel_values
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_object_detection with OwlViT->Owlv2
+    def post_process_object_detection(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to [`Owlv2ImageProcessor.post_process_object_detection`]. Please refer
+        to the docstring of this method for more information.
+        """
+        warnings.warn(
+            "`post_process_object_detection` method is deprecated for OwlVitProcessor and will be removed in v5. "
+            "Use `post_process_grounded_object_detection` instead.",
+            FutureWarning,
+        )
+        return self.image_processor.post_process_object_detection(*args, **kwargs)
 
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_grounded_object_detection with OwlViT->Owlv2
     def post_process_grounded_object_detection(

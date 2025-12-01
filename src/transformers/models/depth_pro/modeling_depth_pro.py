@@ -22,7 +22,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ..auto import AutoModel
@@ -240,6 +239,7 @@ class DepthProPatchEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
     ) -> list[torch.Tensor]:
         batch_size, num_channels, height, width = pixel_values.shape
 
@@ -279,6 +279,7 @@ class DepthProPatchEncoder(nn.Module):
         encodings = self.model(
             # each patch is processed as a separate batch
             patches,
+            head_mask=head_mask,
             # required for intermediate features
             output_hidden_states=self.n_intermediate_hooks > 0,
         )
@@ -343,6 +344,7 @@ class DepthProImageEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -359,6 +361,7 @@ class DepthProImageEncoder(nn.Module):
         )
         encodings = self.model(
             pixel_values=pixel_values,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
@@ -407,6 +410,7 @@ class DepthProEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -415,9 +419,11 @@ class DepthProEncoder(nn.Module):
 
         patch_features = self.patch_encoder(
             pixel_values,
+            head_mask=head_mask,
         )
         image_encodings = self.image_encoder(
             pixel_values,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -603,26 +609,26 @@ class DepthProPreTrainedModel(PreTrainedModel):
     config: DepthProConfig
     base_model_prefix = "depth_pro"
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _no_split_modules = ["DepthProPreActResidualLayer"]
     _keys_to_ignore_on_load_unexpected = ["fov_model.*"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
-            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
 
 
 @auto_docstring
@@ -642,6 +648,7 @@ class DepthProModel(DepthProPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -679,6 +686,7 @@ class DepthProModel(DepthProPreTrainedModel):
 
         encodings = self.encoder(
             pixel_values,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -846,6 +854,7 @@ class DepthProFovEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
 
@@ -859,6 +868,7 @@ class DepthProFovEncoder(nn.Module):
         )
         encodings = self.model(
             pixel_values=pixel_values,
+            head_mask=head_mask,
         )
         hidden_state = encodings[0]
         hidden_state = self.neck(hidden_state)
@@ -937,8 +947,9 @@ class DepthProFovModel(nn.Module):
         self,
         pixel_values: torch.Tensor,
         global_features: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        fov_features = self.fov_encoder(pixel_values)
+        fov_features = self.fov_encoder(pixel_values, head_mask)
 
         global_features = self.conv(global_features)
         global_features = self.activation(global_features)
@@ -1023,6 +1034,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1083,6 +1095,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
 
         depth_pro_outputs = self.depth_pro(
             pixel_values=pixel_values,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
@@ -1097,6 +1110,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
             fov = self.fov_model(
                 pixel_values=pixel_values,
                 global_features=features_for_fov,
+                head_mask=head_mask,
             )
         else:
             fov = None

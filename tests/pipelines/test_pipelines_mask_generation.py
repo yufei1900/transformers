@@ -19,6 +19,7 @@ from huggingface_hub.utils import insecure_hashlib
 
 from transformers import (
     MODEL_FOR_MASK_GENERATION_MAPPING,
+    is_tf_available,
     is_torch_available,
     is_vision_available,
     pipeline,
@@ -33,6 +34,11 @@ from transformers.testing_utils import (
     slow,
 )
 
+
+if is_tf_available():
+    from transformers import TF_MODEL_FOR_MASK_GENERATION_MAPPING
+else:
+    TF_MODEL_FOR_MASK_GENERATION_MAPPING = None
 
 if is_torch_available():
     from transformers import MODEL_FOR_MASK_GENERATION_MAPPING
@@ -66,6 +72,9 @@ def mask_to_test_readable(mask: Image) -> dict:
 @require_torch
 class MaskGenerationPipelineTests(unittest.TestCase):
     model_mapping = dict(list(MODEL_FOR_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_MASK_GENERATION_MAPPING else [])
+    tf_model_mapping = dict(
+        list(TF_MODEL_FOR_MASK_GENERATION_MAPPING.items()) if TF_MODEL_FOR_MASK_GENERATION_MAPPING else []
+    )
 
     def get_test_pipeline(
         self,
@@ -107,7 +116,6 @@ class MaskGenerationPipelineTests(unittest.TestCase):
 
         # fmt: off
         last_output = Expectations({
-            ("xpu", None): {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8872},
             ("cuda", None): {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8871},
             ("rocm", (9, 5)): {'mask': {'hash': 'b5f47c9191', 'shape': (480, 640)}, 'scores': 0.8872}
         }).get_expectation()

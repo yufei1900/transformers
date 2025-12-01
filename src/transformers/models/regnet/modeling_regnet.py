@@ -20,7 +20,6 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
@@ -264,20 +263,20 @@ class RegNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = ["RegNetYLayer"]
 
-    @torch.no_grad()
+    # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel._init_weights
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
-            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
         # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
         elif isinstance(module, nn.Linear):
-            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
-                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                init.uniform_(module.bias, -bound, bound)
+                nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-            init.constant_(module.weight, 1)
-            init.constant_(module.bias, 0)
+            nn.init.constant_(module.weight, 1)
+            nn.init.constant_(module.bias, 0)
 
 
 @auto_docstring

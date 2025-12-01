@@ -14,7 +14,13 @@
 # limitations under the License.
 """Swin Transformer model configuration"""
 
-from ...configuration_utils import PreTrainedConfig
+from collections import OrderedDict
+from collections.abc import Mapping
+
+from packaging import version
+
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -22,7 +28,7 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
+class SwinConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SwinModel`]. It is used to instantiate a Swin
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -30,8 +36,8 @@ class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
     [microsoft/swin-tiny-patch4-window7-224](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
     architecture.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         image_size (`int`, *optional*, defaults to 224):
@@ -154,4 +160,20 @@ class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
         )
 
 
-__all__ = ["SwinConfig"]
+class SwinOnnxConfig(OnnxConfig):
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
+
+
+__all__ = ["SwinConfig", "SwinOnnxConfig"]

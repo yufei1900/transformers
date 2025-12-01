@@ -14,7 +14,6 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -849,51 +848,51 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     config: Wav2Vec2ConformerConfig
     base_model_prefix = "wav2vec2_conformer"
     main_input_name = "input_values"
-    input_modalities = "audio"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
         if isinstance(module, Wav2Vec2ConformerForPreTraining):
             module.project_hid.reset_parameters()
             module.project_q.reset_parameters()
+            module.project_hid._is_hf_initialized = True
+            module.project_q._is_hf_initialized = True
         # gumbel softmax requires special init
         elif isinstance(module, Wav2Vec2ConformerGumbelVectorQuantizer):
-            init.normal_(module.weight_proj.weight, mean=0.0, std=1)
-            init.zeros_(module.weight_proj.bias)
-            init.uniform_(module.codevectors)
+            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
+            module.weight_proj.bias.data.zero_()
+            nn.init.uniform_(module.codevectors)
         elif isinstance(module, Wav2Vec2ConformerSelfAttention):
             if hasattr(module, "pos_bias_u"):
-                init.xavier_uniform_(module.pos_bias_u)
+                nn.init.xavier_uniform_(module.pos_bias_u)
             if hasattr(module, "pos_bias_v"):
-                init.xavier_uniform_(module.pos_bias_v)
+                nn.init.xavier_uniform_(module.pos_bias_v)
         elif isinstance(module, Wav2Vec2ConformerPositionalConvEmbedding):
-            init.normal_(
+            nn.init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            init.constant_(module.conv.bias, 0)
+            nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, Wav2Vec2ConformerFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            init.uniform_(module.projection.weight, a=-k, b=k)
-            init.uniform_(module.projection.bias, a=-k, b=k)
+            nn.init.uniform_(module.projection.weight, a=-k, b=k)
+            nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                init.zeros_(module.bias)
+                module.bias.data.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            init.kaiming_normal_(module.weight)
+            nn.init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                init.uniform_(module.bias, a=-k, b=k)
+                nn.init.uniform_(module.bias, a=-k, b=k)
 
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
@@ -1229,7 +1228,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
         predicted_features: torch.FloatTensor,
-        temperature: float = 0.1,
+        temperature: int = 0.1,
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
@@ -1647,7 +1646,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.num_labels = config.num_labels
 
-        self.post_init()
+        self.init_weights()
 
     def freeze_feature_encoder(self):
         """
@@ -1803,7 +1802,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
 
         self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels)
 
-        self.post_init()
+        self.init_weights()
 
     def freeze_feature_encoder(self):
         """

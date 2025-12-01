@@ -211,7 +211,10 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
 
+    fx_compatible = False
+    test_pruning = False
     test_resize_embeddings = False
+    test_head_masking = False
     test_torch_exportable = True
     has_attentions = False
 

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AllKwargsForChatTemplate, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
@@ -103,7 +103,14 @@ def get_image_prompt_string(
     )
 
 
+class SmolVLMImagesKwargs(ImagesKwargs, total=False):
+    return_row_col_info: Optional[bool]
+    max_image_size: Optional[dict[str, int]]
+
+
 class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: SmolVLMImagesKwargs
+
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -141,6 +148,11 @@ class SmolVLMProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
+    attributes = ["image_processor", "tokenizer", "video_processor"]
+    image_processor_class = "SmolVLMImageProcessor"
+    video_processor_class = "SmolVLMVideoProcessor"  # NOTE: uses different interpolation than slow processors
+    tokenizer_class = "AutoTokenizer"
+
     def __init__(
         self,
         image_processor,
@@ -167,6 +179,8 @@ class SmolVLMProcessor(ProcessorMixin):
 
     def expand_text_with_image_tokens(self, text, image_rows, image_cols):
         prompt_strings = []
+        image_rows = image_rows if image_rows is not None else [[0] * len(text)]
+        image_cols = image_cols if image_cols is not None else [[0] * len(text)]
         for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
             image_prompt_strings = []
@@ -234,6 +248,7 @@ class SmolVLMProcessor(ProcessorMixin):
         self,
         images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
+        audio=None,
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[SmolVLMProcessorKwargs],
     ) -> BatchEncoding:
@@ -323,11 +338,6 @@ class SmolVLMProcessor(ProcessorMixin):
                     raise ValueError(
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
-                # Set default values for image_rows and image_cols if not provided
-                if image_rows is None:
-                    image_rows = [[0] * n_images for n_images in n_images_in_text]
-                if image_cols is None:
-                    image_cols = [[0] * n_images for n_images in n_images_in_text]
                 text = self.expand_text_with_image_tokens(text, image_rows=image_rows, image_cols=image_cols)
 
         elif videos is not None:
@@ -343,7 +353,7 @@ class SmolVLMProcessor(ProcessorMixin):
 
             # If user has not requested video metadata, pop it. By default metadata
             # is always returned to expand video tokens correctly
-            if not kwargs.get("return_metadata"):
+            if "return_metadata" not in kwargs:
                 vision_inputs.pop("video_metadata")
             inputs.update(vision_inputs)
 

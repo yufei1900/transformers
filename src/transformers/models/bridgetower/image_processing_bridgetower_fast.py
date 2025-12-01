@@ -23,6 +23,7 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
+    DefaultFastImageProcessorKwargs,
     ImageInput,
     SizeDict,
     TensorType,
@@ -32,7 +33,6 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...utils import auto_docstring
-from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs
 
 
 def make_pixel_mask(
@@ -85,6 +85,17 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+class BridgeTowerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Args:
+        size_divisor (`int`, *optional*, defaults to 32):
+            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
+            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
+    """
+
+    size_divisor: Optional[int]
+
+
 @auto_docstring
 class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
@@ -99,14 +110,14 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_pad = True
     size_divisor = 32
-    valid_kwargs = BridgeTowerImageProcessorKwargs
+    valid_kwargs = BridgeTowerFastImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_mask"]
 
-    def __init__(self, **kwargs: Unpack[BridgeTowerImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

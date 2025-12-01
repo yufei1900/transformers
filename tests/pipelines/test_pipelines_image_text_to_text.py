@@ -196,21 +196,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        # Deprecated behavior should raise an error after v5
-        with self.assertRaises(ValueError):
-            outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "What’s the difference between these two images?"},
-                    {"type": "image", "url": image_ny},
-                    {"type": "image", "url": image_chicago},
-                ],
-            }
-        ]
-        outputs = pipe(text=messages, return_full_text=True, max_new_tokens=10)
+        outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
         self.assertEqual(
             outputs,
             [
@@ -222,11 +208,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What’s the difference between these two images?"},
                                 {
                                     "type": "image",
-                                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
                                 },
                                 {
                                     "type": "image",
-                                    "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
                                 },
                             ],
                         }
@@ -238,11 +224,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What’s the difference between these two images?"},
                                 {
                                     "type": "image",
-                                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
                                 },
                                 {
                                     "type": "image",
-                                    "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
                                 },
                             ],
                         },

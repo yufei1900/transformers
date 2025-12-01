@@ -154,6 +154,7 @@ for label, score in zip(candidate_labels, probs):
 ## AlignConfig
 
 [[autodoc]] AlignConfig
+    - from_text_vision_configs
 
 ## AlignTextConfig
 

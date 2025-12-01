@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -203,11 +204,11 @@ class CsmGenerationMixin(GenerationMixin):
                     criterion.max_length -= cur_len
         # ============================================
 
-        model_forward = (
-            self.get_compiled_call(generation_config.compile_config)
-            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
-            else self.__call__
-        )
+        model_forward = self.__call__
+        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
+        if compile_forward:
+            os.environ["TOKENIZERS_PARALLELISM"] = "0"
+            model_forward = self.get_compiled_call(generation_config.compile_config)
 
         is_prefill = True
         while self._has_unfinished_sequences(

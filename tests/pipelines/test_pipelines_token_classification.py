@@ -18,6 +18,7 @@ import numpy as np
 
 from transformers import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+    TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     AutoModelForTokenClassification,
     AutoTokenizer,
     TokenClassificationPipeline,
@@ -50,9 +51,14 @@ _TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
 @is_pipeline_test
 class TokenClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
     if not hasattr(model_mapping, "is_dummy"):
         model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if not hasattr(tf_model_mapping, "is_dummy"):
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
 
     def get_test_pipeline(
         self,
@@ -544,7 +550,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_aggregation_strategy_no_b_i_prefix(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         # Just to understand scores indexes in this test
         token_classifier.model.config.id2label = {0: "O", 1: "MISC", 2: "PER", 3: "ORG", 4: "LOC"}
         example = [
@@ -593,7 +599,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_aggregation_strategy(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         # Just to understand scores indexes in this test
         self.assertEqual(
             token_classifier.model.config.id2label,
@@ -666,7 +672,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_aggregation_strategy_example2(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
         # Just to understand scores indexes in this test
         self.assertEqual(
             token_classifier.model.config.id2label,
@@ -742,7 +748,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_gather_pre_entities(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
 
         sentence = "Hello there"
 
@@ -787,7 +793,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_word_heuristic_leading_space(self):
         model_name = "hf-internal-testing/tiny-random-deberta-v2"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
 
         sentence = "I play the theremin"
 
@@ -822,7 +828,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_no_offset_tokenizer(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-        token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer)
+        token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer, framework="pt")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
@@ -835,7 +841,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(task="token-classification", model=model_name)
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
@@ -845,14 +851,16 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
-        token_classifier = pipeline(task="token-classification", model=model_name, ignore_labels=["O", "I-MISC"])
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="pt", ignore_labels=["O", "I-MISC"]
+        )
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
             [],
         )
 
-        token_classifier = pipeline(task="token-classification", model=model_name)
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
         # Overload offset_mapping
         outputs = token_classifier(
             "This is a test !", offset_mapping=[(0, 0), (0, 1), (0, 2), (0, 0), (0, 0), (0, 0), (0, 0)]
@@ -885,7 +893,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_fp16(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(task="token-classification", model=model_name, dtype=torch.float16)
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt", dtype=torch.float16)
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
@@ -898,7 +906,9 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_bf16(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(task="token-classification", model=model_name, dtype=torch.bfloat16)
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="pt", dtype=torch.bfloat16
+        )
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),

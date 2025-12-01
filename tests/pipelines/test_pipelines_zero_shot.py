@@ -16,6 +16,7 @@ import unittest
 
 from transformers import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     Pipeline,
     ZeroShotClassificationPipeline,
     pipeline,
@@ -42,9 +43,14 @@ _TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
 @is_pipeline_test
 class ZeroShotClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
     if not hasattr(model_mapping, "is_dummy"):
         model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if not hasattr(tf_model_mapping, "is_dummy"):
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
 
     def get_test_pipeline(
         self,
@@ -165,6 +171,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="pt",
         )
         # There was a regression in 4.10 for this
         # Adding a test so we don't make the mistake again.
@@ -178,6 +185,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="pt",
         )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
@@ -197,6 +205,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="pt",
             dtype=torch.float16,
         )
         outputs = zero_shot_classifier(
@@ -217,6 +226,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
         zero_shot_classifier = pipeline(
             "zero-shot-classification",
             model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="pt",
             dtype=torch.bfloat16,
         )
         outputs = zero_shot_classifier(
@@ -235,7 +245,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_large_model_pt(self):
-        zero_shot_classifier = pipeline("zero-shot-classification", model="FacebookAI/roberta-large-mnli")
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification", model="FacebookAI/roberta-large-mnli", framework="pt"
+        )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
         )

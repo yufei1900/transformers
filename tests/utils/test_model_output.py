@@ -15,6 +15,7 @@
 import io
 import unittest
 from dataclasses import dataclass
+from typing import Optional
 
 import pytest
 
@@ -30,8 +31,8 @@ if is_torch_available():
 @dataclass
 class ModelOutputTest(ModelOutput):
     a: float
-    b: float | None = None
-    c: float | None = None
+    b: Optional[float] = None
+    c: Optional[float] = None
 
 
 class ModelOutputTester(unittest.TestCase):
@@ -181,8 +182,8 @@ class ModelOutputTestNoDataclass(ModelOutput):
     """Invalid test subclass of ModelOutput where @dataclass decorator is not used"""
 
     a: float
-    b: float | None = None
-    c: float | None = None
+    b: Optional[float] = None
+    c: Optional[float] = None
 
 
 class ModelOutputSubclassTester(unittest.TestCase):

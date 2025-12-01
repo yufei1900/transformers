@@ -18,7 +18,8 @@ import pytest
 
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    MBart50Tokenizer,
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    MBart50TokenizerFast,
     MBartConfig,
     MBartForConditionalGeneration,
     TranslationPipeline,
@@ -32,6 +33,7 @@ from .test_pipelines_common import ANY
 @is_pipeline_test
 class TranslationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(
         self,
@@ -79,7 +81,7 @@ class TranslationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random")
+        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="pt")
         outputs = translator("This is a test string", max_length=20)
         self.assertEqual(
             outputs,
@@ -95,7 +97,7 @@ class TranslationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_en_to_de_pt(self):
-        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random")
+        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="pt")
         outputs = translator("This is a test string", max_length=20)
         self.assertEqual(
             outputs,
@@ -127,7 +129,7 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
     @slow
     def test_multilingual_translation(self):
         model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-        tokenizer = MBart50Tokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+        tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
         translator = pipeline(task="translation", model=model, tokenizer=tokenizer)
         # Missing src_lang, tgt_lang

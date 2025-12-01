@@ -16,6 +16,7 @@ import sys
 from logging import Logger
 from threading import Event, Thread
 from time import perf_counter, sleep
+from typing import Optional
 
 
 # Add the parent directory to Python path to import benchmarks_entrypoint
@@ -41,7 +42,7 @@ except ImportError:
     GenerationConfig = None
     StaticCache = None
 
-os.environ["HF_XET_HIGH_PERFORMANCE"] = "1"
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "1"
 
 # Only set torch precision if torch is available
@@ -144,7 +145,7 @@ def run_benchmark(
             q = torch.empty_like(probs_sort).exponential_(1)
             return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(dtype=torch.int)
 
-        def logits_to_probs(logits, temperature: float = 1.0, top_k: int | None = None):
+        def logits_to_probs(logits, temperature: float = 1.0, top_k: Optional[int] = None):
             logits = logits / max(temperature, 1e-5)
 
             if top_k is not None:
@@ -154,7 +155,7 @@ def run_benchmark(
             probs = torch.nn.functional.softmax(logits, dim=-1)
             return probs
 
-        def sample(logits, temperature: float = 1.0, top_k: int | None = None):
+        def sample(logits, temperature: float = 1.0, top_k: Optional[int] = None):
             probs = logits_to_probs(logits[0, -1], temperature, top_k)
             idx_next = multinomial_sample_one_no_sync(probs)
             return idx_next, probs

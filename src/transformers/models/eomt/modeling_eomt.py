@@ -21,16 +21,14 @@
 
 import collections.abc
 import math
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
@@ -810,6 +808,11 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -893,10 +896,10 @@ class EomtLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask)
+        self_attention_output, _ = self.attention(hidden_states_norm, head_mask)
         self_attention_output = self.layer_scale1(self_attention_output)
 
         # first residual connection
@@ -988,7 +991,6 @@ class EomtPreTrainedModel(PreTrainedModel):
     config: EomtConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
@@ -997,29 +999,29 @@ class EomtPreTrainedModel(PreTrainedModel):
         "attentions": EomtAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
-                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                init.uniform_(module.bias, -bound, bound)
+                nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=1)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
+            module.weight.data.normal_(mean=0.0, std=1)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, EomtLayerScale):
             if hasattr(module, "lambda1"):
-                init.constant_(module.lambda1, self.config.layerscale_value)
+                module.lambda1.data.fill_(self.config.layerscale_value)
         elif isinstance(module, EomtEmbeddings):
-            init.trunc_normal_(module.cls_token, mean=0.0, std=std)
-            init.zeros_(module.register_tokens)
+            module.cls_token.data = nn.init.trunc_normal_(
+                module.cls_token.data.to(torch.float32), mean=0.0, std=std
+            ).to(module.cls_token.dtype)
+            module.register_tokens.data.zero_()
 
 
 @auto_docstring(

@@ -49,6 +49,7 @@ class VoxtralPreTrainedModel(Qwen2AudioPreTrainedModel):
     _supports_cache_class = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
+    _supports_attention_backend = True
     _no_split_modules = None
 
 
@@ -86,7 +87,7 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
         if input_features.shape[-1] != expected_seq_length:
             raise ValueError(
-                f"Voxtral expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
+                f"Qwen2Audio expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
 
         input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
@@ -102,6 +103,7 @@ class VoxtralEncoder(Qwen2AudioEncoder):
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
+                layer_head_mask=None,
             )
             hidden_states = layer_outputs[0]
 
@@ -132,6 +134,9 @@ class VoxtralMultiModalProjector(nn.Module):
     """
 )
 class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["embed_positions"]
 
     def __init__(self, config):

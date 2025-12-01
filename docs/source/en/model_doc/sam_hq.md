@@ -56,10 +56,9 @@ Below is an example on how to run mask generation given an image and a 2D point:
 import torch
 from PIL import Image
 import requests
-from transformers import SamHQModel, SamHQProcessor
-from accelerate import Accelerator
+from transformers import infer_device, SamHQModel, SamHQProcessor
 
-device = Accelerator().device
+device = infer_device()
 model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
 processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -83,10 +82,9 @@ You can also process your own masks alongside the input images in the processor 
 import torch
 from PIL import Image
 import requests
-from transformers import SamHQModel, SamHQProcessor
-from accelerate import Accelerator
+from transformers import infer_device, SamHQModel, SamHQProcessor
 
-device = Accelerator().device
+device = infer_device()
 model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
 processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 

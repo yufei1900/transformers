@@ -24,6 +24,7 @@ from ...image_processing_utils import (
 )
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -40,10 +41,25 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from .image_processing_glm4v import Glm4vImageProcessorKwargs, smart_resize
+from .image_processing_glm4v import smart_resize
 
 
 logger = logging.get_logger(__name__)
+
+
+class Glm4vFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
 
 
 @auto_docstring
@@ -59,10 +75,10 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    valid_kwargs = Glm4vImageProcessorKwargs
+    valid_kwargs = Glm4vFastImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Glm4vImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Glm4vFastImageProcessorKwargs]):
         super().__init__(**kwargs)
         if self.size is not None and (
             self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
@@ -189,7 +205,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Glm4vImageProcessorKwargs],
+        **kwargs: Unpack[Glm4vFastImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

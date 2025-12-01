@@ -20,9 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2CLS
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -64,6 +62,11 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -297,7 +300,7 @@ class SwiftFormerEncoderBlock(nn.Module):
         return x
 
 
-class SwiftFormerStage(GradientCheckpointingLayer):
+class SwiftFormerStage(nn.Module):
     """
     A Swiftformer stage consisting of a series of `SwiftFormerConvEncoder` blocks and a final
     `SwiftFormerEncoderBlock`.
@@ -386,28 +389,26 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
     config: SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["SwiftFormerEncoderBlock"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Conv2d, nn.Linear)):
-            init.trunc_normal_(module.weight, std=0.02)
+            nn.init.trunc_normal_(module.weight, std=0.02)
             if module.bias is not None:
-                init.constant_(module.bias, 0)
+                nn.init.constant_(module.bias, 0)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            init.constant_(module.bias, 0)
-            init.constant_(module.weight, 1.0)
+            nn.init.constant_(module.bias, 0)
+            nn.init.constant_(module.weight, 1.0)
         elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
-            init.ones_(module.layer_scale)
+            module.layer_scale.data.fill_(1.0)
         elif isinstance(module, SwiftFormerEncoderBlock):
             if self.config.use_layer_scale:
-                init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
-                init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
+                module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
+                module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
         elif isinstance(module, SwiftFormerEfficientAdditiveAttention):
-            init.normal_(module.w_g)
+            nn.init.normal_(module.w_g)
 
 
 @auto_docstring
