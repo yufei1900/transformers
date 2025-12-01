@@ -42,6 +42,8 @@ from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compilin
 from ...utils.generic import check_model_inputs
 from .configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLTextConfig, Qwen3VLVisionConfig
 
+from liger_kernel.transformers.fused_linear_cross_entropy import LigerFusedLinearCrossEntropyLoss
+
 
 class Qwen3VLVisionMLP(nn.Module):
     def __init__(self, config):
@@ -1404,11 +1406,20 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
 
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = hidden_states[:, slice_indices, :]
 
         loss = None
+        logits = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            shift_hidden_states = hidden_states[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss_fct = LigerFusedLinearCrossEntropyLoss()
+            # flatten tokens
+            shift_hidden_states = shift_hidden_states.view(-1, self.config.hidden_size)
+            shift_labels = shift_labels.view(-1)
+            loss = loss_fct(self.lm_head.weight, shift_hidden_states, shift_labels)
+        else:
+            logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         return Qwen3VLCausalLMOutputWithPast(
             loss=loss,
