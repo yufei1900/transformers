@@ -49,6 +49,7 @@ from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge
 from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
 from .configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
+from liger_kernel.transformers.fused_linear_cross_entropy import LigerFusedLinearCrossEntropyLoss
 
 
 if is_causal_conv1d_available():
@@ -1931,11 +1932,26 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
 
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        # logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = hidden_states[:, slice_indices, :]
 
         loss = None
+        logits = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            # loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            shift_hidden_states = hidden_states[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss_fct = LigerFusedLinearCrossEntropyLoss()
+            # flatten tokens
+            shift_hidden_states = shift_hidden_states.view(-1, self.config.hidden_size)
+            shift_labels = shift_labels.view(-1)
+            loss = loss_fct(self.lm_head.weight, shift_hidden_states, shift_labels)
+        else:
+            logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        # loss = None
+        # if labels is not None:
+        #     loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
         return Qwen3_5CausalLMOutputWithPast(
             loss=loss,
