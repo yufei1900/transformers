@@ -778,7 +778,6 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
         self.rotary_emb = Qwen3VLTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     @check_model_inputs()
@@ -848,6 +847,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
+        mtp_hidden_states = []
         for layer_idx, decoder_layer in enumerate(self.layers):
             layer_outputs = decoder_layer(
                 hidden_states,
@@ -860,6 +860,9 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
             )
             hidden_states = layer_outputs
 
+            if layer_idx >= len(self.layers) - 1 - self.num_nextn_predict_layers:
+                mtp_hidden_states.append(hidden_states)
+
             # add visual features to the hidden states of first several layers
             if deepstack_visual_embeds is not None and layer_idx in range(len(deepstack_visual_embeds)):
                 hidden_states = self._deepstack_process(
@@ -868,6 +871,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
                     deepstack_visual_embeds[layer_idx],
                 )
 
+        hidden_states = torch.stack([x for x in mtp_hidden_states], dim=0)
         hidden_states = self.norm(hidden_states)
 
         return BaseModelOutputWithPast(
@@ -1282,6 +1286,17 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
         self.model = Qwen3VLModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
+        #mtp
+        self.num_nextn_predict_layers = config.text_config.num_nextn_predict_layers
+        if self.num_nextn_predict_layers > 0:
+            # 初始化空的 ModuleList，参数不复制
+            self.lm_heads = nn.ModuleList(
+                [nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+                 for _ in range(self.num_nextn_predict_layers)]
+            )
+
+        # Initialize weights and apply final processing
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1361,18 +1376,38 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
 
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        hidden_states = hidden_states[:, slice_indices, :]
 
         loss = None
         logits = None
         if labels is not None:
-            shift_hidden_states = hidden_states[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
             loss_fct = LigerFusedLinearCrossEntropyLoss()
-            # flatten tokens
-            shift_hidden_states = shift_hidden_states.view(-1, self.config.hidden_size)
-            shift_labels = shift_labels.view(-1)
-            loss = loss_fct(self.lm_head.weight, shift_hidden_states, shift_labels)
+            if self.num_nextn_predict_layers > 0:
+                # Shift so that tokens < n predict n
+                losses = []
+                for i in range(len(hidden_states)):
+                    if labels.size(1) > i + 1:  # Ensure we have enough tokens to shift
+                        shift_hidden_state = hidden_states[i][..., :(labels.size(1) - (i + 1)), :].contiguous()
+                        shift_label = labels[..., (i + 1):].contiguous()
+                        shift_hidden_state = shift_hidden_state.view(-1, self.config.hidden_size)
+                        shift_label = shift_label.view(-1)
+                        shift_label = shift_label.to(shift_hidden_state.device)
+                        if i==0:
+                            losses.append(loss_fct(self.lm_head.weight, shift_hidden_state, shift_label))
+                        else:
+                            losses.append(loss_fct(self.lm_heads[i-1].weight, shift_hidden_state, shift_label))
+                
+                weighted_losses = [losses[0]] + [l * 0.7 for l in losses[1:]]
+                loss = sum(weighted_losses) / len(weighted_losses)
+            else:
+                # Shift so that tokens < n predict n
+                shift_hidden_states = hidden_states[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
+                # Flatten the tokens
+                shift_hidden_states = shift_hidden_states.view(-1, self.config.hidden_size)
+                shift_labels = shift_labels.view(-1)
+                # Enable model parallelism
+                shift_labels = shift_labels.to(shift_hidden_states.device)
+                loss = loss_fct(self.lm_head.weight, shift_hidden_states, shift_labels)
         else:
             logits = self.lm_head(hidden_states[:, slice_indices, :])
 

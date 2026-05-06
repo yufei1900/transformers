@@ -183,6 +183,7 @@ class Qwen3VLTextConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
+        num_nextn_predict_layers=0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -191,6 +192,7 @@ class Qwen3VLTextConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_nextn_predict_layers = num_nextn_predict_layers
 
         # for backward compatibility
         if num_key_value_heads is None:
