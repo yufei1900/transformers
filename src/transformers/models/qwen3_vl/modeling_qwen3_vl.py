@@ -1414,7 +1414,10 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
             if self.num_nextn_predict_layers > 0:
                 logits = []
                 for i in range(len(hidden_states)):
-                    logit = self.lm_heads[i](hidden_states[i][:, slice_indices, :])
+                    if i==0:
+                        logit = self.lm_head(hidden_states[i][:, slice_indices, :])
+                    else:
+                        logit = self.lm_heads[i-1](hidden_states[i][:, slice_indices, :])
                     logit = logit.float()
                     logits.append(logit)
             else:
