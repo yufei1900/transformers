@@ -778,6 +778,8 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
         self.rotary_emb = Qwen3VLTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
+        self.num_nextn_predict_layers = config.num_nextn_predict_layers
+
         self.post_init()
 
     @check_model_inputs()
