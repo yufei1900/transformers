@@ -1411,7 +1411,15 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
                 shift_labels = shift_labels.to(shift_hidden_states.device)
                 loss = loss_fct(self.lm_head.weight, shift_hidden_states, shift_labels)
         else:
-            logits = self.lm_head(hidden_states[:, slice_indices, :])
+            if self.num_nextn_predict_layers > 0:
+                logits = []
+                for i in range(len(hidden_states)):
+                    logit = self.lm_heads[i](hidden_states[i][:, slice_indices, :])
+                    logit = logit.float()
+                    logits.append(logit)
+            else:
+                logits = self.lm_head(hidden_states[:, slice_indices, :])
+                logits = logits.float()
 
         return Qwen3VLCausalLMOutputWithPast(
             loss=loss,
