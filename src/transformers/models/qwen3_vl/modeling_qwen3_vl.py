@@ -1386,7 +1386,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
             if self.num_nextn_predict_layers > 0:
                 # Shift so that tokens < n predict n
                 losses = []
-                for i in range(len(hidden_states)):
+                for i in range(self.num_nextn_predict_layers+1):
                     if labels.size(1) > i + 1:  # Ensure we have enough tokens to shift
                         shift_hidden_state = hidden_states[i][..., :(labels.size(1) - (i + 1)), :].contiguous()
                         shift_label = labels[..., (i + 1):].contiguous()
@@ -1402,6 +1402,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
                 loss = sum(weighted_losses) / len(weighted_losses)
             else:
                 # Shift so that tokens < n predict n
+                hidden_states = hidden_states[0]
                 shift_hidden_states = hidden_states[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
                 # Flatten the tokens
@@ -1421,7 +1422,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
                     logit = logit.float()
                     logits.append(logit)
             else:
-                logits = self.lm_head(hidden_states[:, slice_indices, :])
+                logits = self.lm_head(hidden_states[0][:, slice_indices, :])
                 logits = logits.float()
 
         return Qwen3VLCausalLMOutputWithPast(
