@@ -1398,7 +1398,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
                         else:
                             losses.append(loss_fct(self.lm_heads[i-1].weight, shift_hidden_state, shift_label))
                 
-                weighted_losses = [losses[0]] + [l * 0.7 for l in losses[1:]]
+                weighted_losses = [losses[0]] + [l * 0.5 for l in losses[1:]]
                 loss = sum(weighted_losses) / len(weighted_losses)
             else:
                 # Shift so that tokens < n predict n
